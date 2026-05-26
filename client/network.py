@@ -2,8 +2,6 @@ import socket
 import threading
 import queue
 from shared.protocol import *
-from client.login import *
-import json
 
 
 class Network:
@@ -21,13 +19,12 @@ class Network:
     def connect(self):
         try:
             self.client.connect(self.addr)
-            return open_login(self.client)
-        except:
-            pass
+        except Exception as e:
+            print(e)
 
     def send(self, msg: dict):
         try:
-            self.client.send(encode_msg(msg))
+            self.client.sendall(encode_msg(msg))
         except socket.error as e:
             print(e)
 
