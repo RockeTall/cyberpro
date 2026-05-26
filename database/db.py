@@ -1,7 +1,11 @@
 import sqlite3
 import bcrypt
 
-DB_PATH = "users.db"
+import os
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # directory of db.py
+DB_PATH = os.path.join(BASE_DIR, "users.db")
+print(f"db path: {DB_PATH}")
 
 
 def get_connection():

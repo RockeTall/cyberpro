@@ -24,21 +24,29 @@ def open_login(sock: socket.socket) -> dict:
     error_label.pack()
 
     def attempt(msg):
-        sock.sendall(encode_msg(msg))
-        data = b""
-        while not data.endswith(b"\n"):
-            chunk = sock.recv(1024)
-            if not chunk:
-                break
-            data += chunk
-        print(repr(data))
-        response = decode_msg(data.decode("utf-8").strip())
-        if response["type"] == AUTH_SUCCESS:
-            result["player_id"] = response["player_id"]
-            result["username"] = response["username"]
-            window.destroy()
-        else:
-            error_label.config(text=response["reason"])
+        try:
+            sock.sendall(encode_msg(msg))
+        except socket.timeout:
+            print("timeout")
+            error_label.config(text="Timed out")
+        buffer = ""
+        try:
+            data = sock.recv(1024)
+        except socket.timeout:
+            print("timeout")
+            error_label.config(text="Timed out")
+        buffer += data.decode("utf-8")
+        while "\n" in buffer:
+            line,buffer = buffer.split("\n",1)
+            if line:
+                response = decode_msg(line)
+                print(repr(data))
+                if response["type"] == AUTH_SUCCESS:
+                    result["player_id"] = response["player_id"]
+                    result["username"] = response["username"]
+                    window.destroy()
+                else:
+                    error_label.config(text=response["reason"])
 
     def on_login():
         attempt(msg_login(username_entry.get(), password_entry.get()))

@@ -33,6 +33,8 @@ def handle_client(conn, addr):
                     if user_id:
                         authenticated = True
                         conn.sendall(encode_msg(msg_auth_success(user_id, msg["username"])))
+                        for event in draw_history:
+                            conn.sendall(event)
                     else:
                         conn.sendall(encode_msg(msg_auth_fail("wrong username or password")))
                 elif msg["type"] == REGISTER:
@@ -40,6 +42,8 @@ def handle_client(conn, addr):
                     if user_id:
                         authenticated = True
                         conn.sendall(encode_msg(msg_auth_success(user_id, msg["username"])))
+                        for event in draw_history:
+                            conn.sendall(event)
                     else:
                         conn.sendall(encode_msg(msg_auth_fail("username taken")))
                 elif msg["type"] == DRAW_EVENT:
@@ -60,8 +64,6 @@ print('Server Listening')
 while True:
     conn, addr = server.accept()
     clients.append(conn)
-    for event in draw_history:
-        conn.sendall(event)
     thread = threading.Thread(target=handle_client, args=(conn, addr))
     thread.daemon = True
     thread.start()

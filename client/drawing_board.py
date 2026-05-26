@@ -4,6 +4,7 @@ import pygame
 import socket
 from shared.protocol import *
 
+
 def run(sock: socket.socket,inc :queue.Queue):
     pygame.init()
 
