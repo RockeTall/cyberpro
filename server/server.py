@@ -5,6 +5,7 @@ import threading
 from player import *
 from shared.protocol import *
 from database.db import *
+from game_manager import *
 
 create_tables()
 clients = []
