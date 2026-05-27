@@ -2,7 +2,8 @@ import socket
 import threading
 import queue
 from shared.protocol import *
-
+import ssl
+import os
 
 class Network:
     def __init__(self):
@@ -11,13 +12,15 @@ class Network:
         self.port = 5555
         self.addr = (self.server, self.port)
         self.inc = queue.Queue()
-        self.p = self.connect()
-
-    def getP(self):
-        return self.p
+        self.connect()
 
     def connect(self):
         try:
+            BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+            cert = os.path.join(BASE_DIR, "..", "certs", "cert.pem")
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            context.load_verify_locations(cert)
+            self.client = context.wrap_socket(self.client, server_hostname="localhost")
             self.client.connect(self.addr)
         except Exception as e:
             print(e)

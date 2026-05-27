@@ -37,7 +37,7 @@ def open_login(sock: socket.socket) -> dict:
             error_label.config(text="Timed out")
         buffer += data.decode("utf-8")
         while "\n" in buffer:
-            line,buffer = buffer.split("\n",1)
+            line, buffer = buffer.split("\n", 1)
             if line:
                 response = decode_msg(line)
                 print(repr(data))
