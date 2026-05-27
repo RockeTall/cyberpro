@@ -9,20 +9,28 @@ from game_manager import *
 
 create_tables()
 clients = []
-players = []
-draw_history = []
+manager = GameManager()
+
+
+def authenticate(conn, user_id, username):
+    player = Player(user_id, username, conn)
+    room = manager.get_room(1)
+    room.add_player(player)
+    player.send(msg_auth_success(user_id, username))
+    for event in room.draw_history:
+        player.send(event)
+    return player
 
 
 def handle_client(conn, addr):
     buffer = ""
     authenticated = False
+    player = None
     while True:
         try:
             data = conn.recv(4096)
         except Exception as e:
-            print(e)
-            conn.close()
-            clients.remove(conn)
+            print(f"[{addr}] recv error: {e}")
             break
         if not data:
             break
@@ -36,44 +44,31 @@ def handle_client(conn, addr):
                     user_id = login_user(msg["username"], msg["password"])
                     if user_id:
                         authenticated = True
-                        player = Player(user_id, msg["username"], conn)
-                        players.append(player)
-                        player.send(msg_auth_success(user_id, msg["username"]))
-                        for event in draw_history:
-                            player.send(event)
+                        player = authenticate(conn, user_id, msg["username"])
                     else:
                         conn.sendall(encode_msg(msg_auth_fail("wrong username or password")))
                 elif msg["type"] == REGISTER:
                     user_id = register_user(msg["username"], msg["password"])
                     if user_id:
                         authenticated = True
-                        player = Player(user_id, msg["username"], conn)
-                        players.append(player)
-                        player.send(msg_auth_success(user_id, msg["username"]))
-                        for event in draw_history:
-                            player.send(event)
+                        player = authenticate(conn, user_id, msg["username"])
                     else:
                         conn.sendall(encode_msg(msg_auth_fail("username taken")))
                 elif msg["type"] == DRAW_EVENT:
-                    draw_history.append(msg)
-                    for player in players[:]:
-                        if player.conn != conn:
-                            try:
-                                player.send(msg)
-                            except:
-                                players.remove(player)
+                    room = manager.get_room(1)
+                    room.draw_history.append(msg)
+                    if player:
+                        room.broadcast_except(msg, player)
     if conn in clients:
         clients.remove(conn)
-    for player in players[:]:
-        if player.conn == conn:
-            players.remove(player)
+    if player:
+        manager.remove_player(player)
     conn.close()
 
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 cert = os.path.join(BASE_DIR, "..", "certs", "cert.pem")
 key = os.path.join(BASE_DIR, "..", "certs", "key.pem")
-
 
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
