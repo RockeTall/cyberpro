@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import messagebox
 import socket
-from shared.protocol import *
+import shared.protocol as protocol
 
 
 def open_login(sock: socket.socket) -> dict:
@@ -25,7 +25,7 @@ def open_login(sock: socket.socket) -> dict:
 
     def attempt(msg):
         try:
-            sock.sendall(encode_msg(msg))
+            sock.sendall(protocol.encode_msg(msg))
         except socket.timeout:
             print("timeout")
             error_label.config(text="Timed out")
@@ -39,9 +39,9 @@ def open_login(sock: socket.socket) -> dict:
         while "\n" in buffer:
             line, buffer = buffer.split("\n", 1)
             if line:
-                response = decode_msg(line)
+                response = protocol.decode_msg(line)
                 print(repr(data))
-                if response["type"] == AUTH_SUCCESS:
+                if response["type"] == protocol.AUTH_SUCCESS:
                     result["player_id"] = response["player_id"]
                     result["username"] = response["username"]
                     window.destroy()
@@ -49,10 +49,10 @@ def open_login(sock: socket.socket) -> dict:
                     error_label.config(text=response["reason"])
 
     def on_login():
-        attempt(msg_login(username_entry.get(), password_entry.get()))
+        attempt(protocol.msg_login(username_entry.get(), password_entry.get()))
 
     def on_register():
-        attempt(msg_register(username_entry.get(), password_entry.get()))
+        attempt(protocol.msg_register(username_entry.get(), password_entry.get()))
 
     tk.Button(window, text="Login", command=on_login).pack(pady=5)
     tk.Button(window, text="Register", command=on_register).pack()

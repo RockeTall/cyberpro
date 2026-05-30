@@ -4,10 +4,11 @@ from shared.protocol import encode_msg
 
 
 class Player:
-    def __init__(self, player_id, username, conn: socket.socket):
+    def __init__(self, player_id, username, conn: socket.socket, room=0):
         self.conn = conn
         self.username = username
         self.id = player_id
+        self.room = room
         self.score = 0
         self.is_drawing = False
 

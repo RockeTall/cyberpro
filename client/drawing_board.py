@@ -1,9 +1,8 @@
 import queue
-from operator import truediv
-
+import pygame_gui
 import pygame
 import socket
-from shared.protocol import *
+import shared.protocol as protocol
 
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
@@ -33,7 +32,7 @@ class Button:
         self.rect = pygame.Rect(x, y, width, height)
         self.text = text
         self.color = color
-        self.font = pygame.font.SysFont("Arial", 12)  # create once
+        self.font = pygame.font.SysFont("Arial", 12)
         self.hollow = hollow
         self.attr = attr
         self.name = name
@@ -57,19 +56,30 @@ class Button:
 
 
 class DrawingBoard:
-    def __init__(self, netw, inc):
+    def __init__(self, netw, inc, username, player_id):
         self.netw = netw
+        self.username = username
+        self.player_id = player_id
         self.inc = inc
         pygame.init()
+        # in DrawingBoard.__init__
+        self.width = 1200
+        self.height = 700
 
-        self.width = 800
-        self.height = 600
+        self.top_bar_height = 40
+        self.toolbar_height = 100
+        self.left_panel_width = 150
+        self.right_panel_width = 200
+
+        xcanvas = self.left_panel_width
+        ycanvas = self.top_bar_height
+        wcanvas = self.width - self.left_panel_width - self.right_panel_width
+        hcanvas = self.height - self.top_bar_height - self.toolbar_height
+
         self.screen = pygame.display.set_mode((self.width, self.height))
         pygame.display.set_caption("Scryber")
 
-        canvas_height = self.height - 60
-        canvas_width = self.width
-        self.canvas = Canvas(canvas_width, canvas_height)
+        self.canvas = Canvas(wcanvas, hcanvas, xcanvas, ycanvas)
 
         self.colors = {
             "black": (0, 0, 0),
@@ -92,29 +102,55 @@ class DrawingBoard:
             "well done": 14,
         }
 
+        self.UImanager = pygame_gui.UIManager((self.width, self.height))
+
+        self.chat_input = pygame_gui.elements.UITextEntryLine(
+            relative_rect=pygame.Rect(
+                self.width - self.right_panel_width,
+                self.height - self.toolbar_height - 40,
+                self.right_panel_width,
+                35
+            ),
+            manager=self.UImanager
+        )
+
+        self.chat_screen = pygame_gui.elements.UITextBox(
+            html_text="",
+            relative_rect=pygame.Rect(
+                self.width - self.right_panel_width,
+                self.top_bar_height,
+                self.right_panel_width,
+                self.height - self.top_bar_height - self.toolbar_height - 40
+            ),
+            manager=self.UImanager
+        )
         self.current_size = self.bsizes["medium"]
         self.current_color = BLACK
         self.last_pos = None
         self.drawing = False
-        
+
         box_size = 40
         self.buttons = []
         for i, (name, color) in enumerate(self.colors.items()):
-            x = 10 + i * (box_size + 5)
-            btn = Button("color", x, canvas_height + 10, box_size, box_size, color, hollow=False)
+            x = 10 + self.canvas.rect.x + i * (box_size + 5)
+            btn = Button("color", x, hcanvas + 50, box_size, box_size, color, hollow=False)
             self.buttons.append(btn)
 
         for i, (name, size) in enumerate(self.bsizes.items()):
-            x = 10 + (i + len(self.colors)) * (box_size + 5)
-            btn = Button("bsize", x, canvas_height + 10, box_size, box_size, (200, 200, 200), attr=size)
+            x = 10 + self.canvas.rect.x + (i + len(self.colors)) * (box_size + 5)
+            btn = Button("bsize", x, hcanvas + 50, box_size, box_size, (200, 200, 200), attr=size)
             self.buttons.append(btn)
 
-        clear_x = 10 + (len(self.colors) + len(self.bsizes)) * (box_size + 5)
-        self.buttons.append(Button("clear", clear_x, canvas_height + 10, box_size, box_size, (200, 200, 200), "CLEAR"))
+        clear_x = 10 + self.canvas.rect.x + (len(self.colors) + len(self.bsizes)) * (box_size + 5)
+        self.buttons.append(Button("clear", clear_x, hcanvas + 50, box_size, box_size, (200, 200, 200), "CLEAR"))
 
-    def handle_events(self):
+        self.current_word = ""
+        self.blanks = 0
+        self.current_drawer = ""
+        self.game_started = False
+        self.scores = {}
 
-        
+    def handle_events(self, time):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return False
@@ -133,7 +169,10 @@ class DrawingBoard:
                         break
                 if not clicked_box and self.canvas.contains(event.pos):
                     self.drawing = True
-                    self.last_pos = event.pos
+                    mx, my = event.pos
+                    canvasmx = mx - self.canvas.rect.x
+                    canvasmy = my - self.canvas.rect.y
+                    self.last_pos = (canvasmx, canvasmy)
 
             if event.type == pygame.MOUSEBUTTONUP:
                 self.drawing = False
@@ -142,24 +181,67 @@ class DrawingBoard:
             if event.type == pygame.MOUSEMOTION:
                 if self.drawing:
                     mx, my = event.pos
+                    canvasmx = mx - self.canvas.rect.x
+                    canvasmy = my - self.canvas.rect.y
                     if self.canvas.contains((mx, my)):
-                        self.canvas.draw_stroke(self.current_color, self.last_pos, (mx, my), self.current_size)
+                        self.canvas.draw_stroke(self.current_color, self.last_pos, (canvasmx, canvasmy),
+                                                self.current_size)
                         self.netw.send(
-                            msg_draw(self.last_pos[0], self.last_pos[1], mx, my, list(self.current_color), self.current_size))
-                    self.last_pos = (mx, my)
+                            protocol.msg_draw(self.last_pos[0], self.last_pos[1], canvasmx, canvasmy,
+                                              list(self.current_color),
+                                              self.current_size))
+                    self.last_pos = (canvasmx, canvasmy)
+            if event.type == pygame_gui.UI_TEXT_ENTRY_FINISHED:
+                if event.ui_element == self.chat_input:
+                    text = self.chat_input.get_text()
+                    if text:
+                        self.netw.send(protocol.msg_chat(text))
+                        self.chat_input.set_text("")
+
+            self.UImanager.process_events(event)
         return True
 
-    def draw_incoming(self):
+    def handle_incoming(self):
         while not self.inc.empty():
             rec = self.inc.get()
-            if rec["type"] == DRAW_EVENT:
+            if rec["type"] == protocol.DRAW_EVENT:
                 color = tuple(rec["color"])
                 self.canvas.draw_stroke(color, (rec["x1"], rec["y1"]), (rec["x2"], rec["y2"]), rec["brush_size"])
+            elif rec["type"] == protocol.CHAT:
+                self.chat_screen.append_html_text(
+                    f"<b>{rec['username']}</b>: {rec['message']}<br>"
+                )
+            elif rec["type"] == protocol.GAME_START:
+                self.game_started = True
+                self.current_drawer = rec["drawer"]
+                self.canvas.clear()
 
-    def render(self):
+            elif rec["type"] == protocol.WORD_TO_DRAW:
+                self.current_word = rec["word"]
+
+            elif rec["type"] == protocol.BLANKS:
+                wordlen = rec["blanks"]
+                self.blanks = " ".join(["_"] * wordlen)
+
+            elif rec["type"] == protocol.CORRECT:
+                self.chat_screen.append_html_text(
+                    f"<b>{rec['username']} guessed correctly! +{rec['points']}<br>")
+
+            elif rec["type"] == protocol.TURN_END:
+                self.current_word = rec["word"]
+                self.scores = rec["scores"]
+                self.canvas.clear()
+
+            elif rec["type"] == protocol.GAME_END:
+                self.game_started = False
+                self.chat_screen.append_html_text(
+                    f"<b>Game over! Winner: {rec['winner']}<br>")
+
+    def render(self, time):
         self.screen.fill((200, 200, 200))
-        self.screen.blit(self.canvas.surface, (0, 0))
-
+        self.screen.blit(self.canvas.surface, (self.canvas.rect.x, self.canvas.rect.y))
+        self.UImanager.update(time)
+        self.UImanager.draw_ui(self.screen)
         for btn in self.buttons:
             btn.draw(self.screen)
             if btn.color == self.current_color and btn.name == "color":
@@ -169,11 +251,27 @@ class DrawingBoard:
             if btn.name == "clear":
                 pygame.draw.rect(self.screen, (100, 100, 100), btn.rect, 3)
 
+        pygame.draw.rect(self.screen, (50, 50, 50), (0, 0, self.width, self.top_bar_height))
+        font = pygame.font.SysFont("Arial", 12)
+        text_word = font.render(self.blanks if not self.current_word else
+                                self.current_word if self.current_drawer == self.username
+                                else self.blanks, True, (255, 255, 255))
+        self.screen.blit(text_word, (self.width // 2 - text_word.get_width() // 2, 10))
+        for i, (username, score) in enumerate(self.scores.items()):
+            color = (255, 215, 0) if username == self.current_drawer else (255, 255, 255)
+            text = font.render(f"{username}: {score}", True, color)
+            self.screen.blit(text, (5, self.top_bar_height + 10 + i * 25))
+
+
+
+
     def run(self):
+        clock = pygame.time.Clock()
         running = True
         while running:
-            running = self.handle_events()
-            self.draw_incoming()
-            self.render()
+            time = clock.tick(60) / 1000.0
+            running = self.handle_events(time)
+            self.handle_incoming()
+            self.render(time)
             pygame.display.flip()
         pygame.quit()

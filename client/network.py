@@ -1,7 +1,7 @@
 import socket
 import threading
 import queue
-from shared.protocol import *
+import shared.protocol as protocol
 import ssl
 import os
 
@@ -27,7 +27,7 @@ class Network:
 
     def send(self, msg: dict):
         try:
-            self.client.sendall(encode_msg(msg))
+            self.client.sendall(protocol.encode_msg(msg))
         except socket.error as e:
             print(e)
 
@@ -42,7 +42,7 @@ class Network:
                 while "\n" in buffer:
                     line, buffer = buffer.split("\n", 1)
                     if line:
-                        rec = decode_msg(line)
+                        rec = protocol.decode_msg(line)
                         self.inc.put(rec)
                         print(rec)
             except Exception as e:

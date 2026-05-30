@@ -2,12 +2,12 @@ import socket
 import ssl
 import os
 import threading
-from player import *
-from shared.protocol import *
-from database.db import *
-from game_manager import *
+from player import Player
+import shared.protocol as protocol
+import database.db as db
+from game_manager import GameManager,GameRoom
 #wsp
-create_tables()
+db.create_tables()
 clients = []
 manager = GameManager()
 
@@ -16,7 +16,7 @@ def authenticate(conn, user_id, username):
     player = Player(user_id, username, conn)
     room = manager.get_room(1)
     room.add_player(player)
-    player.send(msg_auth_success(user_id, username))
+    player.send(protocol.msg_auth_success(user_id, username))
     for event in room.draw_history:
         player.send(event)
     return player
@@ -38,27 +38,33 @@ def handle_client(conn, addr):
         while "\n" in buffer:
             line, buffer = buffer.split("\n", 1)
             if line:
-                msg = decode_msg(line)
+                msg = protocol.decode_msg(line)
                 print(f"[{addr}] {msg['type']}")
-                if msg["type"] == LOGIN:
-                    user_id = login_user(msg["username"], msg["password"])
+                if msg["type"] == protocol.LOGIN:
+                    user_id = db.login_user(msg["username"], msg["password"])
                     if user_id:
                         authenticated = True
                         player = authenticate(conn, user_id, msg["username"])
                     else:
-                        conn.sendall(encode_msg(msg_auth_fail("wrong username or password")))
-                elif msg["type"] == REGISTER:
-                    user_id = register_user(msg["username"], msg["password"])
+                        conn.sendall(protocol.encode_msg(protocol.msg_auth_fail("wrong username or password")))
+                elif msg["type"] == protocol.REGISTER:
+                    user_id = db.register_user(msg["username"], msg["password"])
                     if user_id:
                         authenticated = True
                         player = authenticate(conn, user_id, msg["username"])
                     else:
-                        conn.sendall(encode_msg(msg_auth_fail("username taken")))
-                elif msg["type"] == DRAW_EVENT:
-                    room = manager.get_room(1)
-                    room.draw_history.append(msg)
-                    if player:
-                        room.broadcast_except(msg, player)
+                        conn.sendall(protocol.encode_msg(protocol.msg_auth_fail("username taken")))
+                if authenticated:
+                    if msg["type"] == protocol.DRAW_EVENT:
+                        room = manager.get_room(player.room)
+                        room.draw_history.append(msg)
+                        if player:
+                            room.broadcast_except(msg, player)
+                    elif msg["type"] == protocol.CHAT:
+                        if player:
+                            room = manager.get_room(player.room)
+                            if not room.guess(player,msg["message"]):
+                                room.broadcast(protocol.msg_chat(msg["message"], player.username))
     if conn in clients:
         clients.remove(conn)
     if player:
