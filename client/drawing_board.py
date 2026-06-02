@@ -62,7 +62,6 @@ class DrawingBoard:
         self.player_id = player_id
         self.inc = inc
         pygame.init()
-        # in DrawingBoard.__init__
         self.width = 1200
         self.height = 700
 
@@ -143,12 +142,19 @@ class DrawingBoard:
 
         clear_x = 10 + self.canvas.rect.x + (len(self.colors) + len(self.bsizes)) * (box_size + 5)
         self.buttons.append(Button("clear", clear_x, hcanvas + 50, box_size, box_size, (200, 200, 200), "CLEAR"))
+        start_x = 10 + self.canvas.rect.x + len(self.buttons) * (box_size + 5)
+        self.buttons.append(Button("start", start_x, hcanvas + 50, box_size, box_size, (200, 200, 200), "START"))
 
         self.current_word = ""
-        self.blanks = 0
+        self.blanks = ""
         self.current_drawer = ""
         self.game_started = False
         self.scores = {}
+        self.turn_length = 60
+        self.time_left = self.turn_length
+        self.current_round = 0
+        self.total_rounds = 3
+        self.last_tick = pygame.time.get_ticks()
 
     def handle_events(self, time):
         for event in pygame.event.get():
@@ -166,9 +172,12 @@ class DrawingBoard:
                             self.current_size = btn.attr
                         elif btn.name == "clear":
                             self.canvas.clear()
+                        elif btn.name == "start":
+                            self.netw.send(protocol.msg_client_start_game())
                         break
                 if not clicked_box and self.canvas.contains(event.pos):
-                    self.drawing = True
+                    if self.current_drawer == self.username:
+                        self.drawing = True
                     mx, my = event.pos
                     canvasmx = mx - self.canvas.rect.x
                     canvasmy = my - self.canvas.rect.y
@@ -198,7 +207,10 @@ class DrawingBoard:
                         self.netw.send(protocol.msg_chat(text))
                         self.chat_input.set_text("")
 
-            self.UImanager.process_events(event)
+            try:
+                self.UImanager.process_events(event)
+            except Exception as e:
+                print(f"prob chat error: {e}")
         return True
 
     def handle_incoming(self):
@@ -207,21 +219,28 @@ class DrawingBoard:
             if rec["type"] == protocol.DRAW_EVENT:
                 color = tuple(rec["color"])
                 self.canvas.draw_stroke(color, (rec["x1"], rec["y1"]), (rec["x2"], rec["y2"]), rec["brush_size"])
+
             elif rec["type"] == protocol.CHAT:
-                self.chat_screen.append_html_text(
-                    f"<b>{rec['username']}</b>: {rec['message']}<br>"
-                )
+                self.chat_screen.append_html_text(f"<b>{rec['username']}</b>: {rec['message']}<br>")
+
+            elif rec["type"] == protocol.CENSORED:
+                censors = "*" * rec["censors"]
+                self.chat_screen.append_html_text(f"<b>{rec['username']}</b>: {censors}<br>")
+
             elif rec["type"] == protocol.GAME_START:
                 self.game_started = True
-                self.current_drawer = rec["drawer"]
                 self.canvas.clear()
 
             elif rec["type"] == protocol.WORD_TO_DRAW:
                 self.current_word = rec["word"]
+                self.current_drawer = self.username
+                self.start_timer()
 
             elif rec["type"] == protocol.BLANKS:
                 wordlen = rec["blanks"]
                 self.blanks = " ".join(["_"] * wordlen)
+                self.current_drawer = rec["drawer"]
+                self.start_timer()
 
             elif rec["type"] == protocol.CORRECT:
                 self.chat_screen.append_html_text(
@@ -236,6 +255,16 @@ class DrawingBoard:
                 self.game_started = False
                 self.chat_screen.append_html_text(
                     f"<b>Game over! Winner: {rec['winner']}<br>")
+                self.current_round = 0
+
+            elif rec["type"] == protocol.PLAYER_JOINED:
+                if rec["username"] == self.username:
+                    self.scores = rec["scores"]
+                else:
+                    self.scores[rec["username"]] = 0
+
+            elif rec["type"] == protocol.ROUND_START:
+                self.current_round += 1
 
     def render(self, time):
         self.screen.fill((200, 200, 200))
@@ -252,18 +281,38 @@ class DrawingBoard:
                 pygame.draw.rect(self.screen, (100, 100, 100), btn.rect, 3)
 
         pygame.draw.rect(self.screen, (50, 50, 50), (0, 0, self.width, self.top_bar_height))
-        font = pygame.font.SysFont("Arial", 12)
-        text_word = font.render(self.blanks if not self.current_word else
-                                self.current_word if self.current_drawer == self.username
-                                else self.blanks, True, (255, 255, 255))
+        font = pygame.font.SysFont("Comic Sans", 17, bold=True)
+        if self.current_drawer == self.username:
+            text_word = font.render(self.current_word, True, (255, 255, 255))
+        else:
+            text_word = font.render(self.blanks, True, (255, 255, 255))
+
         self.screen.blit(text_word, (self.width // 2 - text_word.get_width() // 2, 10))
+        font = pygame.font.SysFont("Comic Sans", 17, bold=True)
         for i, (username, score) in enumerate(self.scores.items()):
-            color = (255, 215, 0) if username == self.current_drawer else (255, 255, 255)
-            text = font.render(f"{username}: {score}", True, color)
+            if username == self.current_drawer:
+                text = font.render(f"{username}: {score}", True, BLACK, (255, 215, 0))
+            else:
+                text = font.render(f"{username}: {score}", True, BLACK)
+
             self.screen.blit(text, (5, self.top_bar_height + 10 + i * 25))
+        if self.game_started:
+            roundscreen = font.render(f"Round: {self.current_round}/{self.total_rounds}", True, WHITE)
+            self.screen.blit(roundscreen, (20, 10))
 
+            timerscreen = font.render(f"Time left: {self.time_left}", True, WHITE)
+            self.screen.blit(timerscreen, (self.width - timerscreen.get_width() - 20, 10))
 
+    def start_timer(self):
+        self.time_left = self.turn_length
+        self.last_tick = pygame.time.get_ticks()
 
+    def update_timer(self):
+        if self.game_started and self.time_left > 0:
+            current_time = pygame.time.get_ticks()
+            if current_time - self.last_tick >= 1000:
+                self.time_left -= 1
+                self.last_tick = current_time
 
     def run(self):
         clock = pygame.time.Clock()
@@ -271,6 +320,7 @@ class DrawingBoard:
         while running:
             time = clock.tick(60) / 1000.0
             running = self.handle_events(time)
+            self.update_timer()
             self.handle_incoming()
             self.render(time)
             pygame.display.flip()

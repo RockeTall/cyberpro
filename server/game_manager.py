@@ -2,6 +2,7 @@ import threading
 import random
 import time
 import shared.protocol as protocol
+from shared.protocol import msg_player_joined
 
 WORDS = ["cat", "dog", "house", "tree", "car", "phone",
          "computer", "book", "chair", "window", "guitar",
@@ -20,14 +21,14 @@ class GameManager:
         self.rooms.append(new_room)
         return new_room
 
-    def remove_player(self, player_id):
+    def remove_player(self, player):
         for room in self.rooms:
-            for player in room.players[:]:
-                if player.id == player_id:
-                    room.remove_player(player)
-                    if len(room.players) == 0:
-                        self.rooms.remove(room)
-                    return
+            if room.room_id == player.room:
+                room.remove_player(player)
+                if len(room.players) == 0:
+                    self.rooms.remove(room)
+                return
+        return
 
     def start_game_room(self, player):
         start_in = self.get_room(player.room)
@@ -56,12 +57,20 @@ class GameRoom:
         self.current_word = ""
         self.force_end = False
         self.everyone_guessed = False
+        self.scoresdict = {}
+
 
     def start_game(self):
         if len(self.players) < 2:
             return
-        self.game_active = True
-        self.start_round()
+        if not self.game_active:
+            self.game_active = True
+            self.reset()
+            print("starting game")
+            self.broadcast(protocol.msg_game_start(self.room_id))
+            self.start_round()
+        else:
+            print("game already started")
 
     def turn_loop(self):
         while True:
@@ -95,12 +104,14 @@ class GameRoom:
             print("starting new round")
             self.start_round()
             return
+
         self.current_drawer = self.players_drawing.pop(0)
         self.current_word = random.choice(WORDS)
         self.start_time = time.time()
 
         self.current_drawer.send(protocol.msg_word_to_draw(self.current_word))
-        self.broadcast_except(protocol.msg_word_blanks(len(self.current_word)), self.current_drawer)
+        self.broadcast_except(protocol.msg_word_blanks(len(self.current_word), self.current_drawer.username),
+                              self.current_drawer)
         self.turn_loop()
         self.end_turn()
 
@@ -113,6 +124,7 @@ class GameRoom:
             time_left = self.turn_time - (time.time() - self.start_time)
             points = max(10, int(time_left * 10))
             player.score += points
+            self.scoresdict[player.username] = player.score
             self.current_drawer.score += 20
             self.broadcast(protocol.msg_correct_guess(player.username, points))
             if len(self.correct) >= len(self.players) - 1:
@@ -120,16 +132,12 @@ class GameRoom:
             return True
         return False
 
-
     def end_game(self):
         self.game_active = False
 
         if len(self.players) >= 2:
             winner = self.winner()
-            scoresdict = {}
-            for player in self.players:
-                scoresdict[player.username] = player.score
-            self.broadcast(protocol.msg_game_end(winner, scoresdict))
+            self.broadcast(protocol.msg_game_end(winner, self.scoresdict))
         else:
             print("game stopped no players")
 
@@ -137,6 +145,7 @@ class GameRoom:
         scoresdict = {}
         for player in self.players:
             scoresdict[player.username] = player.score
+        self.everyone_guessed = False
         self.broadcast(protocol.msg_turn_end(self.current_word, scoresdict))
         self.start_turn()
 
@@ -154,7 +163,26 @@ class GameRoom:
 
     def add_player(self, player):
         self.players.append(player)
+        self.scoresdict[player.username] = 0
+        for player in self.players:
+            print(player.username)
+        self.broadcast(msg_player_joined(player.username, self.scoresdict))
         player.room = self.room_id
 
     def remove_player(self, player):
         self.players.remove(player)
+
+    def reset(self):
+        self.round_number = 0
+        self.current_word = ""
+        self.current_drawer = None
+        self.players_drawing = []
+        self.correct = set()
+        self.everyone_guessed = False
+        self.force_end = False
+        self.draw_history = []
+        for player in self.players:
+            player.score = 0
+        self.scoresdict = {}
+        for player in self.players:
+            self.scoresdict[player.username] = 0

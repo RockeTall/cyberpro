@@ -1,5 +1,4 @@
 import socket
-
 from shared.protocol import encode_msg
 
 
