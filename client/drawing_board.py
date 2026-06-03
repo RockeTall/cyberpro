@@ -17,8 +17,9 @@ class Canvas:
         self.rect = pygame.Rect(x, y, self.width, self.height)
 
     def draw_stroke(self, color, start, end, size):
+        pygame.draw.circle(self.surface, color, start, size // 2.5)
         pygame.draw.line(self.surface, color, start, end, size)
-        pygame.draw.circle(self.surface, color, end, size // 2)
+        pygame.draw.circle(self.surface, color, end, size // 2.5)
 
     def clear(self):
         self.surface.fill(WHITE)

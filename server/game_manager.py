@@ -59,6 +59,8 @@ class GameRoom:
         self.everyone_guessed = False
         self.scoresdict = {}
 
+        self.lock = threading.Lock()
+
 
     def start_game(self):
         if len(self.players) < 2:
@@ -116,19 +118,21 @@ class GameRoom:
         self.end_turn()
 
     def guess(self, player, guess: str):
-        if not self.game_active or player == self.current_drawer or player in self.correct:
-            return False
+        with self.lock:
+            if not self.game_active or player == self.current_drawer or player in self.correct:
+                return False
 
+            if guess.strip().lower() == self.current_word.lower():
+                self.correct.add(player)
+                time_left = self.turn_time - (time.time() - self.start_time)
+                points = max(10, int(time_left * 10))
+                player.score += points
+                self.scoresdict[player.username] = player.score
+                self.current_drawer.score += 20
+                if len(self.correct) >= len(self.players) - 1:
+                    self.everyone_guessed = True
         if guess.strip().lower() == self.current_word.lower():
-            self.correct.add(player)
-            time_left = self.turn_time - (time.time() - self.start_time)
-            points = max(10, int(time_left * 10))
-            player.score += points
-            self.scoresdict[player.username] = player.score
-            self.current_drawer.score += 20
             self.broadcast(protocol.msg_correct_guess(player.username, points))
-            if len(self.correct) >= len(self.players) - 1:
-                self.everyone_guessed = True
             return True
         return False
 
@@ -139,6 +143,8 @@ class GameRoom:
             winner = self.winner()
             self.broadcast(protocol.msg_game_end(winner, self.scoresdict))
         else:
+            if self.players:
+                self.players[0].send(protocol.msg_game_end("you win",self.scoresdict))
             print("game stopped no players")
 
     def end_turn(self):
@@ -153,24 +159,39 @@ class GameRoom:
         return max(self.players, key=lambda p: p.score).username
 
     def broadcast(self, msg):
-        for player in self.players:
+        for player in list(self.players):
             player.send(msg)
 
     def broadcast_except(self, msg, exclude):
-        for player in self.players:
+        for player in list(self.players):
             if player != exclude:
                 player.send(msg)
 
     def add_player(self, player):
-        self.players.append(player)
-        self.scoresdict[player.username] = 0
+        with self.lock:
+            self.players.append(player)
+            self.scoresdict[player.username] = 0
         for player in self.players:
             print(player.username)
         self.broadcast(msg_player_joined(player.username, self.scoresdict))
         player.room = self.room_id
 
     def remove_player(self, player):
-        self.players.remove(player)
+        with self.lock:
+            if player in self.players:
+                self.players.remove(player)
+            if player in self.correct:
+                self.correct.discard(player)
+            if self.players_drawing and player in self.players_drawing:
+                self.players_drawing.remove(player)
+        self.broadcast(protocol.msg_chat(f"{player.username} has left the room"))
+        if not self.game_active:
+            return
+        if len(self.players) < 2:
+            print("not enough players, ending game")
+            self.end_game()
+        elif player == self.current_drawer:
+            self.everyone_guessed = True
 
     def reset(self):
         self.round_number = 0
