@@ -7,67 +7,75 @@ from PIL import Image, ImageTk
 import assets
 
 
-def open_login(sock: socket.socket) -> dict:
-    result = {}
+class LoginPage():
+    def __init__(self, sock):
+        self.result = {}
+        self.sock = sock
 
-    window = tk.Tk()
-    window.title("Scryber - Login")
-    window.geometry("400x500")
-    window.resizable(False, False)
-    window.configure(bg="#E0CCBA")
-
-    try:
-        img = Image.open("../assets/scryber_logo_big.png")
-        img = img.resize((400, 200))
-        login_logo = ImageTk.PhotoImage(img)
-        login_logo_label = tk.Label(window, image=login_logo, bg="#E0CCBA")
-        login_logo_label.label = login_logo
-        login_logo_label.pack(pady=(0, 0))
-    except Exception as e:
-        print(f"Could not load logo: {e}")
-
-    tk.Label(window, text="Welcome to Scryber!",
-             font=("Comic Sans MS", 20, "bold"),
-             bg="#E0CCBA",
-             fg="#333333"
-             ).pack(pady=(0, 0))
-
-    tk.Label(window, text="Username",
-             font=("Comic Sans MS", 12, "bold"),
-             bg="#E0CCBA",
-             ).pack(pady=3)
-    username_field = tk.Entry(window)
-    username_field.pack()
-
-    tk.Label(window, text="Password",
-             font=("Comic Sans MS", 12, "bold"),
-             bg="#E0CCBA",
-             ).pack(pady=2)
-    password_field = tk.Entry(window, show="*")
-    password_field.pack()
-
-    tk.Label(window, text="Game room",
-             font=("Comic Sans MS", 12, "bold"),
-             bg="#E0CCBA",
-             ).pack(pady=2)
-    gameroom_field = tk.Entry(window)
-    gameroom_field.pack()
-
-    error_label = tk.Label(window, text="", font=("Aria", 12, "bold"), fg="red", bg="#E0CCBA")
-    error_label.pack()
-
-    def attempt(msg):
+        self.window = tk.Tk()
+        self.window.title("Scryber - Login")
+        self.window.geometry("400x500")
+        self.window.resizable(False, False)
+        self.window.configure(bg="#E0CCBA")
+    def start(self):
         try:
-            sock.sendall(protocol.encode_msg(msg))
+            img = Image.open("../assets/scryber_logo_big.png")
+            img = img.resize((400, 200))
+            login_logo = ImageTk.PhotoImage(img)
+            login_logo_label = tk.Label(self.window, image=login_logo, bg="#E0CCBA")
+            login_logo_label.label = login_logo
+            login_logo_label.pack(pady=(0, 0))
+        except Exception as e:
+            print(f"Could not load logo: {e}")
+
+        tk.Label(self.window, text="Welcome to Scryber!",
+                 font=("Comic Sans MS", 20, "bold"),
+                 bg="#E0CCBA",
+                 fg="#333333"
+                 ).pack(pady=(0, 0))
+
+        tk.Label(self.window, text="Username",
+                 font=("Comic Sans MS", 12, "bold"),
+                 bg="#E0CCBA",
+                 ).pack(pady=3)
+        self.username_field = tk.Entry(self.window)
+        self.username_field.pack()
+
+        tk.Label(self.window, text="Password",
+                 font=("Comic Sans MS", 12, "bold"),
+                 bg="#E0CCBA",
+                 ).pack(pady=2)
+        self.password_field = tk.Entry(self.window, show="*")
+        self.password_field.pack()
+
+        tk.Label(self.window, text="Game room",
+                 font=("Comic Sans MS", 12, "bold"),
+                 bg="#E0CCBA",
+                 ).pack(pady=2)
+        self.gameroom_field = tk.Entry(self.window)
+        self.gameroom_field.pack()
+
+        self.error_label = tk.Label(self.window, text="", font=("Arial", 12, "bold"), fg="red", bg="#E0CCBA")
+        self.error_label.pack()
+
+        tk.Button(self.window, text="Login", command=self.on_login).pack(pady=5)
+        tk.Button(self.window, text="Register", command=self.on_register).pack()
+
+        self.window.mainloop()
+        return self.result
+
+    def attempt(self, msg):
+        try:
+            self.sock.sendall(protocol.encode_msg(msg))
         except socket.timeout:
             print("timeout")
-            error_label.config(text="Timed out")
+            self.error_label.config(text="Timed out")
         buffer = ""
         try:
-            data = sock.recv(1024)
+            data = self.sock.recv(1024)
         except socket.timeout:
             print("timeout")
-            error_label.config(text="Timed out")
+            self.error_label.config(text="Timed out")
         buffer += data.decode("utf-8")
         while "\n" in buffer:
             line, buffer = buffer.split("\n", 1)
@@ -75,25 +83,20 @@ def open_login(sock: socket.socket) -> dict:
                 response = protocol.decode_msg(line)
                 print(repr(data))
                 if response["type"] == protocol.AUTH_SUCCESS:
-                    result["player_id"] = response["player_id"]
-                    result["username"] = response["username"]
-                    window.destroy()
+                    self.result["player_id"] = response["player_id"]
+                    self.result["username"] = response["username"]
+                    self.window.destroy()
+
                 else:
                     if response["type"] == protocol.AUTH_FAIL:
-                        error_label.config(text=response["reason"])
+                        self.error_label.config(text=response["reason"])
                     else:
                         print("error")
 
-    def on_login():
-        attempt(protocol.msg_login(username_field.get(), password_field.get(),
-                                   gameroom_field.get() if gameroom_field.get() else 1))
+    def on_login(self):
+        self.attempt(protocol.msg_login(self.username_field.get(), self.password_field.get(),
+                                        self.gameroom_field.get() if self.gameroom_field.get() else 1))
 
-    def on_register():
-        attempt(protocol.msg_register(username_field.get(), password_field.get(),
-                                      gameroom_field.get() if gameroom_field.get() else 1))
-
-    tk.Button(window, text="Login", command=on_login).pack(pady=5)
-    tk.Button(window, text="Register", command=on_register).pack()
-
-    window.mainloop()
-    return result
+    def on_register(self):
+        self.attempt(protocol.msg_register(self.username_field.get(), self.password_field.get(),
+                                           self.gameroom_field.get() if self.gameroom_field.get() else 1))
