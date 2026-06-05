@@ -3,6 +3,9 @@ import pygame_gui
 import pygame
 import socket
 import shared.protocol as protocol
+import os
+import datetime
+from pathlib import Path
 
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
@@ -29,31 +32,80 @@ class Canvas:
 
 
 class Button:
-    def __init__(self, name, x, y, width, height, color, text="", hollow=True, attr=None):
+    def __init__(self, x, y, width, height):
         self.rect = pygame.Rect(x, y, width, height)
-        self.text = text
-        self.color = color
         self.font = pygame.font.SysFont("Arial", 12)
-        self.hollow = hollow
-        self.attr = attr
-        self.name = name
 
     def draw(self, win):
-        if not self.hollow:
-            pygame.draw.rect(win, self.color, self.rect)
-        elif self.name == "bsize":
-            pygame.draw.circle(win, BLACK,
-                               (self.rect.x + round(self.rect.width / 2), self.rect.y + round(self.rect.height / 2)),
-                               self.attr * 1.5)
-        else:
-            pygame.draw.rect(win, self.color, self.rect, 3)
-        if self.text:
-            text = self.font.render(self.text, True, BLACK)
-            win.blit(text, (self.rect.x + round(self.rect.width / 2) - round(text.get_width() / 2),
-                            self.rect.y + round(self.rect.height / 2) - round(text.get_height() / 2)))
+        pass
 
     def click(self, pos):
         return self.rect.collidepoint(pos)
+
+
+class ColorButton(Button):
+    def __init__(self, x, y, size, color):
+        super().__init__(x, y, size, size)
+        self.color = color
+
+    def draw(self, win):
+        pygame.draw.rect(win, self.color, self.rect)
+
+
+class SizeButton(Button):
+    def __init__(self, x, y, size, brush_size):
+        super().__init__(x, y, size, size)
+        self.brush_size = brush_size
+
+    def draw(self, win):
+        pygame.draw.rect(win, (200, 200, 200), self.rect)
+        pygame.draw.circle(win, BLACK,
+                           (self.rect.x + self.rect.width // 2,
+                            self.rect.y + self.rect.height // 2),
+                           int(self.brush_size * 1.5))
+
+
+class ToolButton(Button):
+    def __init__(self, x, y, size, text, bg_color=(200, 200, 200), text_color=BLACK):
+        super().__init__(x, y, size, size)
+        self.text = text
+        self.bg_color = bg_color
+        self.text_color = text_color
+
+    def draw(self, win):
+        pygame.draw.rect(win, self.bg_color, self.rect, border_radius=6)
+        pygame.draw.rect(win, (150, 150, 150), self.rect, 2, border_radius=6)
+        text = self.font.render(self.text, True, self.text_color)
+        win.blit(text, (self.rect.x + self.rect.width // 2 - text.get_width() // 2,
+                        self.rect.y + self.rect.height // 2 - text.get_height() // 2))
+
+
+class ClearButton(ToolButton):
+    def __init__(self, x, y, size):
+        super().__init__(x, y, size, "CLEAR", bg_color=(240, 100, 100), text_color=(255, 255, 255))
+
+
+class StopButton(ToolButton):
+    def __init__(self, x, y, size):
+        super().__init__(x, y, size, "STOP", bg_color=(180, 60, 60), text_color=(255, 255, 255))
+
+
+class DownloadButton(ToolButton):
+    def __init__(self, x, y, size):
+        super().__init__(x, y, size, "SAVE", bg_color=(70, 130, 200), text_color=(255, 255, 255))
+
+
+class StartButton(Button):
+    def __init__(self, x, y):
+        w, h = 200, 55
+        super().__init__(x, y, w, h)
+        self.font = pygame.font.SysFont("Comic Sans MS", 22, bold=True)
+
+    def draw(self, win):
+        pygame.draw.rect(win, (70, 160, 100), self.rect, border_radius=12)
+        pygame.draw.rect(win, (40, 110, 70), self.rect, 3, border_radius=12)
+        text = self.font.render("START", True, (255, 255, 255))
+        win.blit(text, text.get_rect(center=self.rect.center))
 
 
 class DrawingBoard:
@@ -133,18 +185,25 @@ class DrawingBoard:
         self.buttons = []
         for i, (name, color) in enumerate(self.colors.items()):
             x = 10 + self.canvas.rect.x + i * (box_size + 5)
-            btn = Button("color", x, hcanvas + 50, box_size, box_size, color, hollow=False)
-            self.buttons.append(btn)
+            self.buttons.append(ColorButton(x, hcanvas + 50, box_size, color))
 
         for i, (name, size) in enumerate(self.bsizes.items()):
             x = 10 + self.canvas.rect.x + (i + len(self.colors)) * (box_size + 5)
-            btn = Button("bsize", x, hcanvas + 50, box_size, box_size, (200, 200, 200), attr=size)
-            self.buttons.append(btn)
+            self.buttons.append(SizeButton(x, hcanvas + 50, box_size, size))
 
         clear_x = 10 + self.canvas.rect.x + (len(self.colors) + len(self.bsizes)) * (box_size + 5)
-        self.buttons.append(Button("clear", clear_x, hcanvas + 50, box_size, box_size, (200, 200, 200), "CLEAR"))
-        start_x = 10 + self.canvas.rect.x + len(self.buttons) * (box_size + 5)
-        self.buttons.append(Button("start", start_x, hcanvas + 50, box_size, box_size, (200, 200, 200), "START"))
+        self.buttons.append(ClearButton(clear_x, hcanvas + 50, box_size))
+
+        stop_x = 10 + self.canvas.rect.x + len(self.buttons) * (box_size + 5)
+        self.buttons.append(StopButton(stop_x, hcanvas + 50, box_size))
+
+        download_x = 10 + self.canvas.rect.x + len(self.buttons) * (box_size + 5)
+        self.buttons.append(DownloadButton(download_x, hcanvas + 50, box_size))
+
+        start_x = (self.canvas.rect.x + self.canvas.rect.width) // 2
+        start_y = (self.canvas.rect.y + self.canvas.rect.height) // 2
+        self.buttons.append(StartButton(start_x, start_y))
+
 
         self.current_word = ""
         self.blanks = ""
@@ -166,15 +225,22 @@ class DrawingBoard:
                 clicked_box = False
                 for btn in self.buttons:
                     if btn.click(event.pos):
-                        clicked_box = True
-                        if btn.name == "color":
+                        if isinstance(btn, StartButton) and self.game_started:
+                            break
+                        if isinstance(btn, ColorButton):
                             self.current_color = btn.color
-                        elif btn.name == "bsize":
-                            self.current_size = btn.attr
-                        elif btn.name == "clear":
-                            self.canvas.clear()
-                        elif btn.name == "start":
+                        elif isinstance(btn, SizeButton):
+                            self.current_size = btn.brush_size
+                        elif isinstance(btn, ClearButton):
+                            if self.current_drawer == self.username:
+                                self.netw.send(protocol.msg_clear())
+                                self.canvas.clear()
+                        elif isinstance(btn, StopButton):
+                            self.netw.send(protocol.msg_stop_game())
+                        elif isinstance(btn, StartButton):
                             self.netw.send(protocol.msg_client_start_game())
+                        elif isinstance(btn, DownloadButton):
+                            self.screenshot()
                         break
                 if not clicked_box and self.canvas.contains(event.pos):
                     if self.current_drawer == self.username:
@@ -254,6 +320,9 @@ class DrawingBoard:
 
             elif rec["type"] == protocol.GAME_END:
                 self.game_started = False
+                self.canvas.clear()
+                for value in self.scores:
+                    self.scores[value] = 0
                 self.chat_screen.append_html_text(
                     f"<b>Game over! Winner: {rec['winner']}<br>")
                 self.current_round = 0
@@ -261,11 +330,20 @@ class DrawingBoard:
             elif rec["type"] == protocol.PLAYER_JOINED:
                 if rec["username"] == self.username:
                     self.scores = rec["scores"]
+                    if rec["isactive"]:
+                        wordlen = rec["blanks"]
+                        self.blanks = " ".join(["_"] * wordlen)
+                        self.current_round = rec["roundnum"]
+                        self.time_left = rec["time_left"]
+                        self.game_started = True
                 else:
                     self.scores[rec["username"]] = 0
 
             elif rec["type"] == protocol.ROUND_START:
                 self.current_round += 1
+
+            elif rec["type"] == protocol.CLEAR_EVENT:
+                self.canvas.clear()
 
     def render(self, time):
         self.screen.fill((200, 200, 200))
@@ -273,16 +351,19 @@ class DrawingBoard:
         self.UImanager.update(time)
         self.UImanager.draw_ui(self.screen)
         for btn in self.buttons:
-            btn.draw(self.screen)
-            if btn.color == self.current_color and btn.name == "color":
+            if not self.game_started and isinstance(btn, StartButton):
+                StartButton.draw(btn, self.screen)
+            else:
+                if not isinstance(btn, StartButton):
+                    btn.draw(self.screen)
+            if isinstance(btn, ColorButton) and btn.color == self.current_color:
                 pygame.draw.rect(self.screen, (100, 100, 100), btn.rect, 3)
-            if btn.attr == self.current_size and btn.name == "bsize":
-                pygame.draw.rect(self.screen, (100, 100, 100), btn.rect, 3)
-            if btn.name == "clear":
+            if isinstance(btn, SizeButton) and btn.brush_size == self.current_size:
                 pygame.draw.rect(self.screen, (100, 100, 100), btn.rect, 3)
 
         pygame.draw.rect(self.screen, (50, 50, 50), (0, 0, self.width, self.top_bar_height))
         font = pygame.font.SysFont("Comic Sans", 17, bold=True)
+
         if self.current_drawer == self.username:
             text_word = font.render(self.current_word, True, (255, 255, 255))
         else:
@@ -314,6 +395,17 @@ class DrawingBoard:
             if current_time - self.last_tick >= 1000:
                 self.time_left -= 1
                 self.last_tick = current_time
+
+    def screenshot(self):
+        filename = Path.home() / "Downloads" / f"scryber_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+        if not filename.parent.exists():
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            screenshots = Path(base_dir) / "screenshots"
+            screenshots.mkdir(exist_ok=True)
+            filename = screenshots / f"scryber_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+        pygame.image.save(self.canvas.surface, filename)
+        pygame.image.save(self.canvas.surface, str(filename))
+        print(f"saved screenshot to {filename}")
 
     def run(self):
         clock = pygame.time.Clock()

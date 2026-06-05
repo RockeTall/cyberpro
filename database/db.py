@@ -34,6 +34,9 @@ def create_tables():
 def register_user(username: str, password: str) -> int:
     if user_exists(username):
         return None
+    if password == "" or username == "":
+        return None
+    print(f"{password} is password for {username}")
 
     hashed = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(12))
     conn = get_connection()

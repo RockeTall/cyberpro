@@ -15,7 +15,10 @@ class Player:
         self.score += points
 
     def send(self, msg):
-        self.conn.sendall(encode_msg(msg))
+        try:
+            self.conn.sendall(encode_msg(msg))
+        except Exception as e:
+            print(f"couldn't send message {e}")
 
     def __str__(self):
         return f"PLAYER: {self.username}, ID: {self.id}, SCORE: {self.score}"

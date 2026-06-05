@@ -14,15 +14,19 @@ clients = []
 manager = GameManager()
 moderator = AiModerator()
 
-def authenticate(conn, user_id, username):
+def authenticate(conn, user_id, username,gameroom):
     player = Player(user_id, username, conn)
     player.send(protocol.msg_auth_success(user_id, username))
-    room = manager.get_room(1)
+    room = manager.get_room(gameroom)
     room.add_player(player)
-    for event in room.draw_history:
-        player.send(event)
     return player
 
+def isint(value):
+    try:
+        int(value)
+        return True
+    except ValueError:
+        return False
 
 def handle_client(conn, addr):
     buffer = ""
@@ -44,18 +48,38 @@ def handle_client(conn, addr):
                 print(f"[{addr}] {msg['type']}")
                 if msg["type"] == protocol.LOGIN:
                     user_id = db.login_user(msg["username"], msg["password"])
-                    if user_id:
-                        authenticated = True
-                        player = authenticate(conn, user_id, msg["username"])
+                    if isint(msg["gameroom"]):
+                        if user_id:
+                            authenticated = True
+                            player = authenticate(conn, user_id, msg["username"],int(msg["gameroom"]))
+                        else:
+                            try:
+                                conn.sendall(protocol.encode_msg(protocol.msg_auth_fail("wrong username or password")))
+                            except Exception as e:
+                                print(f"[{addr}] {e}")
                     else:
-                        conn.sendall(protocol.encode_msg(protocol.msg_auth_fail("wrong username or password")))
+                        try:
+                            conn.sendall(protocol.encode_msg(protocol.msg_auth_fail("bad gameroom id")))
+                        except Exception as e:
+                            print(f"[{addr}] {e}")
+
                 elif msg["type"] == protocol.REGISTER:
                     user_id = db.register_user(msg["username"], msg["password"])
-                    if user_id:
-                        authenticated = True
-                        player = authenticate(conn, user_id, msg["username"])
+                    if isint(msg["gameroom"]):
+                        if user_id:
+                            authenticated = True
+                            player = authenticate(conn, user_id, msg["username"], int(msg["gameroom"]))
+                        else:
+                            try:
+                                conn.sendall(protocol.encode_msg(protocol.msg_auth_fail("usraname taken or field empty")))
+                            except Exception as e:
+                                print(f"[{addr}] {e}")
                     else:
-                        conn.sendall(protocol.encode_msg(protocol.msg_auth_fail("username taken")))
+                        try:
+                            conn.sendall(protocol.encode_msg(protocol.msg_auth_fail("bad gameroom id")))
+                        except Exception as e:
+                            print(f"[{addr}] {e}")
+
                 if authenticated:
                     if msg["type"] == protocol.DRAW_EVENT:
                         room = manager.get_room(player.room)
@@ -74,6 +98,11 @@ def handle_client(conn, addr):
                     elif msg["type"] == protocol.CLIENT_START_GAME:
                         print(player.room)
                         manager.start_game_room(player)
+                    elif msg["type"] == protocol.CLEAR_EVENT:
+                        room = manager.get_room(player.room)
+                        room.clear_history(player)
+                    elif msg["type"] == protocol.STOP_GAME:
+                        manager.end_game_room(player)
 
 
     if conn in clients:

@@ -37,7 +37,10 @@ class GameManager:
         room_thread.start()
 
     def end_game_room(self, player):
-        self.rooms[player.room].force_end = True
+        if self.rooms:
+            for room in self.rooms:
+                if room.room_id == player.room:
+                    room.force_end = True
 
 
 class GameRoom:
@@ -60,8 +63,7 @@ class GameRoom:
         self.scoresdict = {}
 
         self.lock = threading.Lock()
-
-
+        self.host = None
     def start_game(self):
         if len(self.players) < 2:
             return
@@ -144,7 +146,7 @@ class GameRoom:
             self.broadcast(protocol.msg_game_end(winner, self.scoresdict))
         else:
             if self.players:
-                self.players[0].send(protocol.msg_game_end("you win",self.scoresdict))
+                self.players[0].send(protocol.msg_game_end("you win", self.scoresdict))
             print("game stopped no players")
 
     def end_turn(self):
@@ -173,7 +175,13 @@ class GameRoom:
             self.scoresdict[player.username] = 0
         for player in self.players:
             print(player.username)
-        self.broadcast(msg_player_joined(player.username, self.scoresdict))
+        if self.game_active:
+            self.broadcast(msg_player_joined(player.username, self.scoresdict, self.game_active, len(self.current_word),
+                                             self.round_number, int(self.turn_time - (time.time() - self.start_time))))
+            for event in self.draw_history:
+                player.send(event)
+        else:
+            self.broadcast(msg_player_joined(player.username, self.scoresdict, self.game_active))
         player.room = self.room_id
 
     def remove_player(self, player):
@@ -192,6 +200,10 @@ class GameRoom:
             self.end_game()
         elif player == self.current_drawer:
             self.everyone_guessed = True
+
+    def clear_history(self, player):
+        self.draw_history = []
+        self.broadcast_except(protocol.msg_clear(), player)
 
     def reset(self):
         self.round_number = 0

@@ -19,8 +19,10 @@ ROUND_START = "round_start"
 TURN_END = "turn_end"
 GAME_END = "game_end"
 CORRECT = "correct"
+STOP_GAME = "stop_game"
 CLIENT_START_GAME = "client_start_game"
 CENSORED = "censored"
+
 
 class Colors(Enum):
     red = 1
@@ -35,17 +37,20 @@ def msg_join_room(player_name: str, room_id: int):
     return {"type": JOIN_ROOM, "name": player_name, "room_id": room_id}
 
 
-def msg_player_joined(username: str, scores: dict):
+def msg_player_joined(username: str, scores: dict, isactive: bool, blanks=0, roundnum=0, time_left=0):
     """ Create dictionary for a message which is when a client joined and
     the server sends a message"""
-    return {"type": PLAYER_JOINED, "username": username, "scores": scores}
+    return {"type": PLAYER_JOINED, "username": username, "scores": scores, "blanks": blanks, "isactive": isactive,
+            "roundnum": roundnum, "time_left": time_left}
 
 
 def msg_chat(message: str, username=""):
     return {"type": CHAT, "message": message, "username": username}
 
+
 def msg_censored(censors: int, username=""):
     return {"type": CENSORED, "censors": censors, "username": username}
+
 
 def msg_draw(x1, y1, x2, y2, color, brush_size):
     return {"type": DRAW_EVENT, "x1": x1, "y1": y1, "x2": x2, "y2": y2, "color": color, "brush_size": brush_size}
@@ -83,12 +88,20 @@ def msg_turn_end(word: str, scores: dict) -> dict:
     return {"type": TURN_END, "word": word, "scores": scores}
 
 
-def msg_login(username: str, password: str) -> dict:
-    return {"type": LOGIN, "username": username, "password": password}
+def msg_clear() -> dict:
+    return {"type": CLEAR_EVENT}
 
 
-def msg_register(username: str, password: str) -> dict:
-    return {"type": REGISTER, "username": username, "password": password}
+def msg_stop_game() -> dict:
+    return {"type": STOP_GAME}
+
+
+def msg_login(username: str, password: str, gameroom: str) -> dict:
+    return {"type": LOGIN, "username": username, "password": password, "gameroom": gameroom}
+
+
+def msg_register(username: str, password: str, gameroom: int) -> dict:
+    return {"type": REGISTER, "username": username, "password": password, "gameroom": gameroom}
 
 
 def msg_auth_success(player_id: int, username: str) -> dict:

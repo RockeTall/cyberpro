@@ -1,26 +1,59 @@
 import tkinter as tk
 from tkinter import messagebox
 import socket
+
 import shared.protocol as protocol
+from PIL import Image, ImageTk
+import assets
 
 
 def open_login(sock: socket.socket) -> dict:
     result = {}
 
     window = tk.Tk()
-    window.title("Skribbl - Login")
-    window.geometry("300x200")
+    window.title("Scryber - Login")
+    window.geometry("400x500")
     window.resizable(False, False)
+    window.configure(bg="#E0CCBA")
 
-    tk.Label(window, text="Username").pack(pady=5)
-    username_entry = tk.Entry(window)
-    username_entry.pack()
+    try:
+        img = Image.open("../assets/scryber_logo_big.png")
+        img = img.resize((400, 200))
+        login_logo = ImageTk.PhotoImage(img)
+        login_logo_label = tk.Label(window, image=login_logo, bg="#E0CCBA")
+        login_logo_label.label = login_logo
+        login_logo_label.pack(pady=(0, 0))
+    except Exception as e:
+        print(f"Could not load logo: {e}")
 
-    tk.Label(window, text="Password").pack(pady=5)
-    password_entry = tk.Entry(window, show="*")
-    password_entry.pack()
+    tk.Label(window, text="Welcome to Scryber!",
+             font=("Comic Sans MS", 20, "bold"),
+             bg="#E0CCBA",
+             fg="#333333"
+             ).pack(pady=(0, 0))
 
-    error_label = tk.Label(window, text="", fg="red")
+    tk.Label(window, text="Username",
+             font=("Comic Sans MS", 12, "bold"),
+             bg="#E0CCBA",
+             ).pack(pady=3)
+    username_field = tk.Entry(window)
+    username_field.pack()
+
+    tk.Label(window, text="Password",
+             font=("Comic Sans MS", 12, "bold"),
+             bg="#E0CCBA",
+             ).pack(pady=2)
+    password_field = tk.Entry(window, show="*")
+    password_field.pack()
+
+    tk.Label(window, text="Game room",
+             font=("Comic Sans MS", 12, "bold"),
+             bg="#E0CCBA",
+             ).pack(pady=2)
+    gameroom_field = tk.Entry(window)
+    gameroom_field.pack()
+
+    error_label = tk.Label(window, text="", font=("Aria", 12, "bold"), fg="red", bg="#E0CCBA")
     error_label.pack()
 
     def attempt(msg):
@@ -46,13 +79,18 @@ def open_login(sock: socket.socket) -> dict:
                     result["username"] = response["username"]
                     window.destroy()
                 else:
-                    error_label.config(text=response["reason"])
+                    if response["type"] == protocol.AUTH_FAIL:
+                        error_label.config(text=response["reason"])
+                    else:
+                        print("error")
 
     def on_login():
-        attempt(protocol.msg_login(username_entry.get(), password_entry.get()))
+        attempt(protocol.msg_login(username_field.get(), password_field.get(),
+                                   gameroom_field.get() if gameroom_field.get() else 1))
 
     def on_register():
-        attempt(protocol.msg_register(username_entry.get(), password_entry.get()))
+        attempt(protocol.msg_register(username_field.get(), password_field.get(),
+                                      gameroom_field.get() if gameroom_field.get() else 1))
 
     tk.Button(window, text="Login", command=on_login).pack(pady=5)
     tk.Button(window, text="Register", command=on_register).pack()
