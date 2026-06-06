@@ -85,7 +85,7 @@ class Mydb:
         return None
 
     def update_score(self, user_id: int, username: str, score: int):
-        """עדכון טבלת הניקוד"""
+        """עדכון טבלת הניקוד לפי מה שמקבלת"""
         with self.lock:
             conn = self.get_connection()
             cursor = conn.cursor()
