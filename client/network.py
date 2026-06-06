@@ -6,6 +6,7 @@ import ssl
 import os
 
 class Network:
+    """מחלקה המטפלת בתקשורת של הלקוח כלפי השרת"""
     def __init__(self):
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server = "localhost"
@@ -15,23 +16,26 @@ class Network:
         self.connect()
 
     def connect(self):
+        """התחבר לשרת תחת מעטפת SSL """
+        basedir = os.path.dirname(os.path.abspath(__file__))
+        cert = os.path.join(basedir, "..", "certs", "cert.pem")
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        context.load_verify_locations(cert)
         try:
-            BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-            cert = os.path.join(BASE_DIR, "..", "certs", "cert.pem")
-            context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-            context.load_verify_locations(cert)
             self.client = context.wrap_socket(self.client, server_hostname="localhost")
             self.client.connect(self.addr)
         except Exception as e:
             print(e)
 
     def send(self, msg: dict):
+        """שליחת הודעה לשרת"""
         try:
             self.client.sendall(protocol.encode_msg(msg))
         except socket.error as e:
             print(e)
 
     def receive_loop(self):
+        """לולאה אינסופית של האזנה להודעות מהשרת, ההודעות עוברות לתור המגיע ל DrawingBoard"""
         buffer = ""
         while True:
             try:

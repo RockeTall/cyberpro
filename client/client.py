@@ -6,6 +6,7 @@ from login import LoginPage
 
 
 def main():
+    """הרצת הלקוח"""
     netw = Network()
     login = LoginPage(netw.client)
     player_info = login.start()

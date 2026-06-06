@@ -5,19 +5,22 @@ import threading
 from player import Player
 import shared.protocol as protocol
 from database.db import Mydb
-from game_manager import GameManager,GameRoom
+from game_manager import GameManager, GameRoom
 from AI_moderator import AiModerator
 from datetime import datetime
 
 
 class Logger:
-    def log(self, direction: str, who: str, content: str, toname = ""):
+    """מחלקת לוגר - מבצעת הדפסות של כל ההודעות העוברות ושוות"""
+
+    def log(self, direction: str, who: str, content: str, toname=""):
+        """מדפיסה את ההודעות אותה מקבלת"""
         time = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         shorten = str(content)[:100]
         print(f"{time} | {direction} | {who} | {toname} | {shorten}")
 
-    def incoming(self, addr, msg, username = ""):
-        self.log("incoming", f"{addr[0]:}:{addr[1]}", msg,f"{username}")
+    def incoming(self, addr, msg, username=""):
+        self.log("incoming", f"{addr[0]:}:{addr[1]}", msg, f"{username}")
 
     def outgoing(self, username, msg):
         self.log("outgoing", f"{username}", msg)
@@ -30,7 +33,10 @@ class Logger:
 
 
 class Server:
-    def __init__(self, host ="localhost",port = 6677):
+    """מחלקת השרת האחראית על צד השרת"""
+
+    def __init__(self, host="localhost", port=6677):
+        """יצירת שרת המחכה בלולאה אינסופית להתחברות לקוחות"""
         self.host = host
         self.port = port
         self.clients = []
@@ -64,7 +70,7 @@ class Server:
             self.server_sock.close()
 
     def ssl_start(self):
-
+        """בניית עטיפת ה SSL המצפינה מידע העובר ברשת"""
         BASE_DIR = os.path.dirname(os.path.abspath(__file__))
         cert = os.path.join(BASE_DIR, "..", "certs", "cert.pem")
         key = os.path.join(BASE_DIR, "..", "certs", "key.pem")
@@ -72,21 +78,23 @@ class Server:
         context.load_cert_chain(cert, key)
         return context
 
-    def authenticate(self,conn, user_id, username, gameroom):
+    def authenticate(self, conn, user_id, username, gameroom):
+        """הפעולה מכניס שחקן לחדר ברגע שנרשם או התחבר ושולחת לו הודעת הצלחה"""
         player = Player(user_id, username, conn, self.logger)
         player.send(protocol.msg_auth_success(user_id, username))
         room = self.manager.get_room(gameroom)
         room.add_player(player)
         return player
 
-    def isint(self,value):
+    def isint(self, value):
         try:
             int(value)
             return True
         except ValueError:
             return False
 
-    def handle_client(self,conn, addr):
+    def handle_client(self, conn, addr):
+        """המחלקה מנהלת כל לקוח על ידי תהליכון אישי, ברגע שהלקוח מתחבר מתקשרת איתו דרך מחלקת ה Player ולא דרך החיבור הראשוני"""
         buffer = ""
         authenticated = False
         player = None
@@ -108,12 +116,12 @@ class Server:
                     else:
                         self.logger.incoming(addr, msg)
                     if msg["type"] == protocol.LOGIN:
-                        user_id = self.canlogin(conn,addr,msg)
+                        user_id = self.canlogin(conn, addr, msg)
                         if user_id:
                             authenticated = True
                             player = self.authenticate(conn, user_id, msg["username"], int(msg["gameroom"]))
                     elif msg["type"] == protocol.REGISTER:
-                        user_id = self.canregister(conn,addr,msg)
+                        user_id = self.canregister(conn, addr, msg)
                         if user_id:
                             authenticated = True
                             player = self.authenticate(conn, user_id, msg["username"], int(msg["gameroom"]))
@@ -148,7 +156,8 @@ class Server:
         conn.close()
         self.logger.incoming(addr, "CLIENT DISCONNECTED")
 
-    def canlogin(self,conn,addr,msg):
+    def canlogin(self, conn, addr, msg):
+        """הפעולה בודקת אם שחקן יכול חיבור, בודקת עם ממסד הנתונים"""
         user_id = self.db.login_user(msg["username"], msg["password"])
         if self.isint(msg["gameroom"]):
             if user_id:
@@ -166,7 +175,8 @@ class Server:
                 print(f"[{addr}] {e}")
         return None
 
-    def canregister(self,conn,addr,msg):
+    def canregister(self, conn, addr, msg):
+        """הפעולה בודקת אם חיבור יכול להרשם, בודקת עם ממסד הנתונים"""
         user_id = self.db.register_user(msg["username"], msg["password"])
         if self.isint(msg["gameroom"]):
             if user_id:
@@ -184,8 +194,10 @@ class Server:
                 print(f"[{addr}] {e}")
         return None
 
+
 def main():
     server = Server(host="127.0.0.1", port=6677)
+
 
 if __name__ == "__main__":
     main()

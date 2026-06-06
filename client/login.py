@@ -1,13 +1,13 @@
 import tkinter as tk
-from tkinter import messagebox
 import socket
 
 import shared.protocol as protocol
 from PIL import Image, ImageTk
-import assets
 
 
-class LoginPage():
+class LoginPage:
+    """מחלקה המטפלת בממשק המשתמש של ההתחברות או הרשמה"""
+
     def __init__(self, sock):
         self.result = {}
         self.sock = sock
@@ -17,7 +17,14 @@ class LoginPage():
         self.window.geometry("400x500")
         self.window.resizable(False, False)
         self.window.configure(bg="#E0CCBA")
+
+        self.username_field = ""
+        self.password_field = ""
+        self.error_label = None
+        self.gameroom_field = ""
+
     def start(self):
+        """לולאה המחכה להכנסת פרטים מהמשתמש"""
         try:
             img = Image.open("../assets/scryber_logo_big.png")
             img = img.resize((400, 200))
@@ -54,6 +61,7 @@ class LoginPage():
                  ).pack(pady=2)
         self.gameroom_field = tk.Entry(self.window)
         self.gameroom_field.pack()
+        self.gameroom_field.insert(0, "1")
 
         self.error_label = tk.Label(self.window, text="", font=("Arial", 12, "bold"), fg="red", bg="#E0CCBA")
         self.error_label.pack()
@@ -64,7 +72,8 @@ class LoginPage():
         self.window.mainloop()
         return self.result
 
-    def attempt(self, msg):
+    def attemptsend(self, msg):
+        """ניסיון שליחת הפרטים לשרת"""
         try:
             self.sock.sendall(protocol.encode_msg(msg))
         except socket.timeout:
@@ -94,9 +103,9 @@ class LoginPage():
                         print("error")
 
     def on_login(self):
-        self.attempt(protocol.msg_login(self.username_field.get(), self.password_field.get(),
-                                        self.gameroom_field.get() if self.gameroom_field.get() else 1))
+        self.attemptsend(protocol.msg_login(self.username_field.get(), self.password_field.get(),
+                                            self.gameroom_field.get() if self.gameroom_field.get() else 1))
 
     def on_register(self):
-        self.attempt(protocol.msg_register(self.username_field.get(), self.password_field.get(),
-                                           self.gameroom_field.get() if self.gameroom_field.get() else 1))
+        self.attemptsend(protocol.msg_register(self.username_field.get(), self.password_field.get(),
+                                               self.gameroom_field.get() if self.gameroom_field.get() else 1))

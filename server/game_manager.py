@@ -3,6 +3,7 @@ import random
 import time
 import shared.protocol as protocol
 from shared.protocol import msg_player_joined
+from database.db import Mydb
 
 WORDS = ["cat", "dog", "house", "tree", "car", "phone",
          "computer", "book", "chair", "window", "guitar",
@@ -10,10 +11,13 @@ WORDS = ["cat", "dog", "house", "tree", "car", "phone",
 
 
 class GameManager:
+    """מחלקה המנהלת את כלל החדרים שבהם מתנהלים המשחקים"""
+
     def __init__(self):
         self.rooms = []
 
     def get_room(self, room_id):
+        """הכנסה לחדר, ואם לא קיים יצירת אחד"""
         for room in self.rooms:
             if room.room_id == room_id:
                 return room
@@ -22,6 +26,7 @@ class GameManager:
         return new_room
 
     def remove_player(self, player):
+        """הוצאת שחקן מחדר"""
         for room in self.rooms:
             if room.room_id == player.room:
                 room.remove_player(player)
@@ -31,12 +36,14 @@ class GameManager:
         return
 
     def start_game_room(self, player):
+        """מתחילה את המשחק בחדר מסויים, מתחילה את המשחק עצמו ומייחסת אליו תהליכון"""
         start_in = self.get_room(player.room)
         room_thread = threading.Thread(target=start_in.start_game)
         room_thread.daemon = True
         room_thread.start()
 
     def end_game_room(self, player):
+        """מסיימת משחק בכוח בחדר מסויים"""
         if self.rooms:
             for room in self.rooms:
                 if room.room_id == player.room:
@@ -44,6 +51,8 @@ class GameManager:
 
 
 class GameRoom:
+    """מחלקה האחראית על חדר והמשחק שמתנהל בו"""
+
     def __init__(self, room_id, number_of_rounds=3, turn_time=60):
         self.room_id = room_id
         self.players = []
@@ -64,7 +73,10 @@ class GameRoom:
 
         self.lock = threading.Lock()
         self.host = None
+        self.db = Mydb()
+
     def start_game(self):
+        """התחלת משחק,הפעולה מפעילה ריסט לפרמטרים ושולחת לכל השחקנים על התחלה"""
         if len(self.players) < 2:
             return
         if not self.game_active:
@@ -76,21 +88,8 @@ class GameRoom:
         else:
             print("game already started")
 
-    def turn_loop(self):
-        while True:
-            time.sleep(0.5)
-            if self.game_active:
-                if time.time() - self.start_time >= self.turn_time:
-                    print(f"time is up, the word was {self.current_word} ")
-                    return
-                if self.everyone_guessed:
-                    print(f"everyone guessed {self.current_word} ")
-                    return
-                if self.force_end:
-                    print("force ended game")
-                    self.end_game()
-
     def start_round(self):
+        """התחלת סיבוב חדש, אם אי אפשר להתחיל סיבוב מפסיקה את המשחק"""
         if len(self.players) < 2 or not self.game_active or self.round_number >= self.number_of_rounds:
             self.end_game()
             return
@@ -102,6 +101,7 @@ class GameRoom:
         self.start_turn()
 
     def start_turn(self):
+        """התחלת תור, הפעולה מתחילה את הזמן ובוחרת את המילה הסודית"""
         self.correct = set()
         self.draw_history = []
         if not self.players_drawing:
@@ -119,7 +119,23 @@ class GameRoom:
         self.turn_loop()
         self.end_turn()
 
+    def turn_loop(self):
+        """לולאת תור - לולאת משחק, נמשכת לאורך התור"""
+        while True:
+            time.sleep(0.5)
+            if self.game_active:
+                if time.time() - self.start_time >= self.turn_time:
+                    print(f"time is up, the word was {self.current_word} ")
+                    return
+                if self.everyone_guessed:
+                    print(f"everyone guessed {self.current_word} ")
+                    return
+                if self.force_end:
+                    print("force ended game")
+                    self.end_game()
+
     def guess(self, player, guess: str):
+        """בדיקה - האם הניחוש נכון"""
         with self.lock:
             if not self.game_active or player == self.current_drawer or player in self.correct:
                 return False
@@ -139,17 +155,21 @@ class GameRoom:
         return False
 
     def end_game(self):
+        """סיום משחק, שליחת המנצח"""
         self.game_active = False
-
         if len(self.players) >= 2:
             winner = self.winner()
             self.broadcast(protocol.msg_game_end(winner, self.scoresdict))
+            for player in self.players:
+                self.db.update_score(player.id, player.username, player.score)
         else:
             if self.players:
                 self.players[0].send(protocol.msg_game_end("you win", self.scoresdict))
+                self.db.update_score(self.players[0].id, self.players[0].id.username, self.players[0].id.score)
             print("game stopped no players")
 
     def end_turn(self):
+        """סיום תור ושלחת נקודות"""
         scoresdict = {}
         for player in self.players:
             scoresdict[player.username] = player.score
@@ -161,15 +181,18 @@ class GameRoom:
         return max(self.players, key=lambda p: p.score).username
 
     def broadcast(self, msg):
+        """שליחת הודעה לכל השחקנים בחדר"""
         for player in list(self.players):
             player.send(msg)
 
-    def broadcast_except(self, msg, exclude):
+    def broadcast_except(self, msg, notsend):
+        """שליחת הודעה לכל השחקנים בחדר חוץ מאחד"""
         for player in list(self.players):
-            if player != exclude:
+            if player != notsend:
                 player.send(msg)
 
     def add_player(self, player):
+        """הוספת שחקן לחדר ושליחת הודעה לשחקנים האחרים ולשחקן עצמו"""
         with self.lock:
             self.players.append(player)
             self.scoresdict[player.username] = 0
@@ -185,6 +208,7 @@ class GameRoom:
         player.room = self.room_id
 
     def remove_player(self, player):
+        """הוצאת שחקן מהחדר ושליחת הודעה לשחקנים"""
         with self.lock:
             if player in self.players:
                 self.players.remove(player)
@@ -193,6 +217,8 @@ class GameRoom:
             if self.players_drawing and player in self.players_drawing:
                 self.players_drawing.remove(player)
         self.broadcast(protocol.msg_chat(f"{player.username} has left the room"))
+        self.db.update_score(player.id,player.username,player.score)
+
         if not self.game_active:
             return
         if len(self.players) < 2:
@@ -202,10 +228,12 @@ class GameRoom:
             self.everyone_guessed = True
 
     def clear_history(self, player):
+        """מחיקת היסטורית הציור על הקנבס"""
         self.draw_history = []
         self.broadcast_except(protocol.msg_clear(), player)
 
     def reset(self):
+        """ריסט לנתוני המשחק בשביל להתחיל אחד חדש"""
         self.round_number = 0
         self.current_word = ""
         self.current_drawer = None

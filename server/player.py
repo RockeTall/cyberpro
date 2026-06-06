@@ -1,8 +1,10 @@
 import socket
 from shared.protocol import encode_msg
 
+
 class Player:
-    def __init__(self, player_id, username, conn: socket.socket,logger, room=0):
+    """מחלקת השחקן המנהלת את החיבור סוקט מצד השרת לאחר שמקבל שם משתמש וסיסמא"""
+    def __init__(self, player_id, username, conn: socket.socket, logger, room=0):
         self.conn = conn
         self.username = username
         self.id = player_id
@@ -15,6 +17,7 @@ class Player:
         self.score += points
 
     def send(self, msg):
+        """שליחת הודעה לשחקן"""
         try:
             self.conn.sendall(encode_msg(msg))
             self.logger.outgoing(self.username, msg)
