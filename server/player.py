@@ -1,5 +1,5 @@
 import socket
-from shared.protocol import encode_msg
+from shared.protocol import ProtFuncs
 
 
 class Player:
@@ -19,7 +19,7 @@ class Player:
     def send(self, msg):
         """שליחת הודעה לשחקן"""
         try:
-            self.conn.sendall(encode_msg(msg))
+            self.conn.sendall(ProtFuncs.encode_msg(msg))
             self.logger.outgoing(self.username, msg)
         except Exception as e:
             print(f"couldn't send message {e}")

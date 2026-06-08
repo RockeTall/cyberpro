@@ -14,7 +14,7 @@ class Mydb:
 
         envi = os.path.join(base_dir, ".env")
         load_dotenv(dotenv_path=envi)
-        self.pepper = os.environ.get("PEPPER", "").encode("utf-8")
+        self.pepper = os.environ.get("PEPPER", "").encode("utf-8") #טעינת הפלפל ממשתני הסביבה
         if not self.pepper:
             raise ValueError("PEPPER environment variable not set")
 

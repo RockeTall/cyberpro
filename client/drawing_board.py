@@ -1,7 +1,6 @@
 import queue
 import pygame_gui
 import pygame
-import socket
 import shared.protocol as protocol
 import os
 import datetime
@@ -137,15 +136,15 @@ class DrawingBoard:
         self.width = 1200
         self.height = 700
 
-        self.top_bar_height = 40
-        self.toolbar_height = 100
-        self.left_panel_width = 150
-        self.right_panel_width = 200
+        self.topbar_height = 40
+        self.toolbar_height = 80
+        self.lpanel_width = 150
+        self.rpanel_width = 200
 
-        xcanvas = self.left_panel_width
-        ycanvas = self.top_bar_height
-        wcanvas = self.width - self.left_panel_width - self.right_panel_width
-        hcanvas = self.height - self.top_bar_height - self.toolbar_height
+        xcanvas = self.lpanel_width
+        ycanvas = self.topbar_height
+        wcanvas = self.width - self.lpanel_width - self.rpanel_width
+        hcanvas = self.height - self.topbar_height - self.toolbar_height
 
         self.screen = pygame.display.set_mode((self.width, self.height))
         pygame.display.set_caption("Scryber")
@@ -176,17 +175,17 @@ class DrawingBoard:
         self.UImanager = pygame_gui.UIManager((self.width, self.height))
 
         self.chat_input = pygame_gui.elements.UITextEntryLine(relative_rect=pygame.Rect(
-            self.width - self.right_panel_width,
+            self.width - self.rpanel_width,
             self.height - self.toolbar_height - 40,
-            self.right_panel_width,
+            self.rpanel_width,
             35
         ), manager=self.UImanager)
 
         self.chat_screen = pygame_gui.elements.UITextBox(html_text="", relative_rect=pygame.Rect(
-            self.width - self.right_panel_width,
-            self.top_bar_height,
-            self.right_panel_width,
-            self.height - self.top_bar_height - self.toolbar_height - 40
+            self.width - self.rpanel_width,
+            self.topbar_height,
+            self.rpanel_width,
+            self.height - self.topbar_height - self.toolbar_height - 40
         ), manager=self.UImanager)
 
         arial = pygame.font.match_font("arial")
@@ -254,12 +253,12 @@ class DrawingBoard:
                             self.current_size = btn.brushsize
                         elif isinstance(btn, ClearButton):
                             if self.current_drawer == self.username:
-                                self.netw.send(protocol.msg_clear())
+                                self.netw.send(protocol.MsgClear())
                                 self.canvas.clear()
                         elif isinstance(btn, StopButton):
-                            self.netw.send(protocol.msg_stop_game())
+                            self.netw.send(protocol.MsgStopGame())
                         elif isinstance(btn, StartButton):
-                            self.netw.send(protocol.msg_client_start_game())
+                            self.netw.send(protocol.MsgClientStartGame())
                         elif isinstance(btn, DownloadButton):
                             self.screenshot()
                         break
@@ -282,7 +281,7 @@ class DrawingBoard:
                 if event.ui_element == self.chat_input:
                     text = self.chat_input.get_text()
                     if text:
-                        self.netw.send(protocol.msg_chat(text))
+                        self.netw.send(protocol.MsgChat(text))
                         self.chat_input.set_text("")
             try:
                 self.UImanager.process_events(event)
@@ -300,7 +299,7 @@ class DrawingBoard:
                 self.canvas.draw_stroke(self.current_color, self.last_pos, (canvasmx, canvasmy),
                                         self.current_size)
                 self.netw.send(
-                    protocol.msg_draw(self.last_pos[0], self.last_pos[1], canvasmx, canvasmy,
+                    protocol.MsgDraw(self.last_pos[0], self.last_pos[1], canvasmx, canvasmy,
                                       list(self.current_color),
                                       self.current_size))
             self.last_pos = (canvasmx, canvasmy)
@@ -309,53 +308,54 @@ class DrawingBoard:
         """טיפול בהודעות המגיעות ללקוח, חלוקה לפי סוג ההודעה"""
         while not self.inc.empty():
             rec = self.inc.get()
-            if rec["type"] == protocol.DRAW_EVENT:
+            print(rec)
+            if rec["type"] == protocol.ProtStrings.DRAW_EVENT:
                 color = tuple(rec["color"])
                 self.canvas.draw_stroke(color, (rec["x1"], rec["y1"]), (rec["x2"], rec["y2"]), rec["brushsize"])
 
-            elif rec["type"] == protocol.CHAT:
+            elif rec["type"] == protocol.ProtStrings.CHAT:
                 self.chat_screen.append_html_text(
                     f'<font face="sysarial" pixel_size = 25><b>{rec["username"]}</b>: {rec["message"]}</font><br>')
 
-            elif rec["type"] == protocol.CENSORED:
+            elif rec["type"] == protocol.ProtStrings.CENSORED:
                 censors = "*" * rec["censors"]
                 self.chat_screen.append_html_text(
                     f'<font face="sysarial" pixel_size = 25><b>{rec["username"]}</b>: {censors}</font><br>')
 
-            elif rec["type"] == protocol.GAME_START:
+            elif rec["type"] == protocol.ProtStrings.GAME_START:
                 self.game_started = True
                 self.canvas.clear()
 
-            elif rec["type"] == protocol.WORD_TO_DRAW:
+            elif rec["type"] == protocol.ProtStrings.WORD_TO_DRAW:
                 self.current_word = rec["word"]
                 self.current_drawer = self.username
                 self.start_timer()
 
-            elif rec["type"] == protocol.BLANKS:
+            elif rec["type"] == protocol.ProtStrings.BLANKS:
                 wordlen = rec["blanks"]
                 self.blanks = " ".join(["_"] * wordlen)
                 self.current_drawer = rec["drawer"]
                 self.start_timer()
 
-            elif rec["type"] == protocol.CORRECT:
+            elif rec["type"] == protocol.ProtStrings.CORRECT:
                 self.chat_screen.append_html_text(
                     f"<font face='sysarial' pixel_size = 25><b>{rec['username']} guessed correctly! +{rec['points']}</font><br>")
 
-            elif rec["type"] == protocol.TURN_END:
+            elif rec["type"] == protocol.ProtStrings.TURN_END:
                 self.current_word = rec["word"]
                 self.scores = rec["scores"]
                 self.canvas.clear()
 
-            elif rec["type"] == protocol.GAME_END:
+            elif rec["type"] == protocol.ProtStrings.GAME_END:
                 self.handle_end_game(rec)
 
-            elif rec["type"] == protocol.PLAYER_JOINED:
+            elif rec["type"] == protocol.ProtStrings.PLAYER_JOINED:
                 self.handle_player_joined(rec)
 
-            elif rec["type"] == protocol.ROUND_START:
+            elif rec["type"] == protocol.ProtStrings.ROUND_START:
                 self.current_round += 1
 
-            elif rec["type"] == protocol.CLEAR_EVENT:
+            elif rec["type"] == protocol.ProtStrings.CLEAR_EVENT:
                 self.canvas.clear()
 
     def handle_end_game(self, rec):
@@ -390,7 +390,7 @@ class DrawingBoard:
 
         self.renderbuttons()
 
-        pygame.draw.rect(self.screen, (50, 50, 50), (0, 0, self.width, self.top_bar_height))
+        pygame.draw.rect(self.screen, (50, 50, 50), (0, 0, self.width, self.topbar_height))
         font = pygame.font.SysFont("Comic Sans", 17, bold=True)
 
         self.renderword(font)
@@ -433,7 +433,7 @@ class DrawingBoard:
             else:
                 text = font.render(f"{username}: {score}", True, BLACK)
 
-            self.screen.blit(text, (5, self.top_bar_height + 10 + i * 25))
+            self.screen.blit(text, (5, self.topbar_height + 10 + i * 25))
 
     def start_timer(self):
         self.time_left = self.turn_length

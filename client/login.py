@@ -75,7 +75,7 @@ class LoginPage:
     def attemptsend(self, msg):
         """ניסיון שליחת הפרטים לשרת"""
         try:
-            self.sock.sendall(protocol.encode_msg(msg))
+            self.sock.sendall(protocol.ProtFuncs.encode_msg(msg))
         except socket.timeout:
             print("timeout")
             self.error_label.config(text="Timed out")
@@ -89,23 +89,31 @@ class LoginPage:
         while "\n" in buffer:
             line, buffer = buffer.split("\n", 1)
             if line:
-                response = protocol.decode_msg(line)
+                response = protocol.ProtFuncs.decode_msg(line)
                 print(repr(data))
-                if response["type"] == protocol.AUTH_SUCCESS:
+                if response["type"] == protocol.ProtStrings.AUTH_SUCCESS:
                     self.result["player_id"] = response["player_id"]
                     self.result["username"] = response["username"]
                     self.window.destroy()
 
                 else:
-                    if response["type"] == protocol.AUTH_FAIL:
+                    if response["type"] == protocol.ProtStrings.AUTH_FAIL:
                         self.error_label.config(text=response["reason"])
                     else:
                         print("error")
 
     def on_login(self):
-        self.attemptsend(protocol.msg_login(self.username_field.get(), self.password_field.get(),
-                                            self.gameroom_field.get() if self.gameroom_field.get() else 1))
+        """כשנלחץ כפתור התחברות"""
+        if len(self.username_field.get()) > 16 or len(self.password_field.get()) > 32:
+            self.error_label.config(text="username or password too long")
+        else:
+            self.attemptsend(protocol.MsgLogin(self.username_field.get(), self.password_field.get(),
+                                                self.gameroom_field.get() if self.gameroom_field.get() else 1))
 
     def on_register(self):
-        self.attemptsend(protocol.msg_register(self.username_field.get(), self.password_field.get(),
-                                               self.gameroom_field.get() if self.gameroom_field.get() else 1))
+        """כשנלחץ כפתור הרשמה"""
+        if len(self.username_field.get()) > 16 or len(self.password_field.get()) > 32:
+            self.error_label.config(text="username or password too long")
+        else:
+            self.attemptsend(protocol.MsgRegister(self.username_field.get(), self.password_field.get(),
+                                                   self.gameroom_field.get() if self.gameroom_field.get() else 1))

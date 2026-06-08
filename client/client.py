@@ -1,5 +1,4 @@
 from network import Network
-import shared.protocol as protocol
 from drawing_board import DrawingBoard
 import threading
 from login import LoginPage

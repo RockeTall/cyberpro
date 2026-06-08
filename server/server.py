@@ -58,7 +58,7 @@ class Server:
         try:
             while True:
                 conn, addr = self.server_sock.accept()
-                conn = context.wrap_socket(conn, server_side=True)
+                conn = context.wrap_socket(conn, server_side=True) # עטיפת ה SSL
                 self.clients.append(conn)
                 self.logger.incoming(addr, "CLIENT CONNECTED")
                 thread = threading.Thread(target=self.handle_client, args=(conn, addr))
@@ -74,14 +74,14 @@ class Server:
         BASE_DIR = os.path.dirname(os.path.abspath(__file__))
         cert = os.path.join(BASE_DIR, "..", "certs", "cert.pem")
         key = os.path.join(BASE_DIR, "..", "certs", "key.pem")
-        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER) # בחירת גרסת הטי אל אס לפי הלקוח
         context.load_cert_chain(cert, key)
         return context
 
     def authenticate(self, conn, user_id, username, gameroom):
         """הפעולה מכניס שחקן לחדר ברגע שנרשם או התחבר ושולחת לו הודעת הצלחה"""
         player = Player(user_id, username, conn, self.logger)
-        player.send(protocol.msg_auth_success(user_id, username))
+        player.send(protocol.MsgAuthSucceed(user_id, username))
         room = self.manager.get_room(gameroom)
         room.add_player(player)
         return player
@@ -95,7 +95,7 @@ class Server:
 
     def handle_client(self, conn, addr):
         """המחלקה מנהלת כל לקוח על ידי תהליכון אישי, ברגע שהלקוח מתחבר מתקשרת איתו דרך מחלקת ה Player ולא דרך החיבור הראשוני"""
-        buffer = ""
+        buff = b""
         authenticated = False
         player = None
         while True:
@@ -106,47 +106,47 @@ class Server:
                 break
             if not data:
                 break
-            buffer += data.decode("utf-8")
-            while "\n" in buffer:
-                line, buffer = buffer.split("\n", 1)
-                if line:
-                    msg = protocol.decode_msg(line)
+            buff += data
+            while buff:
+                msg, buff = protocol.ProtFuncs.packetparse(buff)
+                if msg is None:
+                    break
+                else:
                     if player:
                         self.logger.incoming(addr, msg, player.username)
                     else:
                         self.logger.incoming(addr, msg)
-                    if msg["type"] == protocol.LOGIN:
+                    if msg["type"] == protocol.ProtStrings.LOGIN:
                         user_id = self.canlogin(conn, addr, msg)
                         if user_id:
                             authenticated = True
                             player = self.authenticate(conn, user_id, msg["username"], int(msg["gameroom"]))
-                    elif msg["type"] == protocol.REGISTER:
+                    elif msg["type"] == protocol.ProtStrings.REGISTER:
                         user_id = self.canregister(conn, addr, msg)
                         if user_id:
                             authenticated = True
                             player = self.authenticate(conn, user_id, msg["username"], int(msg["gameroom"]))
                     if authenticated:
-                        if msg["type"] == protocol.DRAW_EVENT:
+                        if msg["type"] == protocol.ProtStrings.DRAW_EVENT:
                             room = self.manager.get_room(player.room)
-
                             room.draw_history.append(msg)
                             if player and room.current_drawer == player:
                                 room.broadcast_except(msg, player)
-                        elif msg["type"] == protocol.CHAT:
+                        elif msg["type"] == protocol.ProtStrings.CHAT:
                             if player:
                                 room = self.manager.get_room(player.room)
                                 if not room.guess(player, msg["message"]):
                                     if self.moderator.review_message(msg["message"]):
-                                        room.broadcast(protocol.msg_chat(msg["message"], player.username))
+                                        room.broadcast(protocol.MsgChat(msg["message"], player.username))
                                     else:
-                                        room.broadcast(protocol.msg_censored(len(msg["message"]), player.username))
-                        elif msg["type"] == protocol.CLIENT_START_GAME:
+                                        room.broadcast(protocol.MsgCensored(len(msg["message"]), player.username))
+                        elif msg["type"] == protocol.ProtStrings.CLIENT_START_GAME:
                             print(player.room)
                             self.manager.start_game_room(player)
-                        elif msg["type"] == protocol.CLEAR_EVENT:
+                        elif msg["type"] == protocol.ProtStrings.CLEAR_EVENT:
                             room = self.manager.get_room(player.room)
                             room.clear_history(player)
-                        elif msg["type"] == protocol.STOP_GAME:
+                        elif msg["type"] == protocol.ProtStrings.STOP_GAME:
                             self.manager.end_game_room(player)
 
         if conn in self.clients:
@@ -165,12 +165,12 @@ class Server:
             else:
                 try:
                     conn.sendall(
-                        protocol.encode_msg(protocol.msg_auth_fail("wrong username or password")))
+                        protocol.ProtFuncs.encode_msg(protocol.MsgAuthFailed("wrong username or password")))
                 except Exception as e:
                     print(f"[{addr}] {e}")
         else:
             try:
-                conn.sendall(protocol.encode_msg(protocol.msg_auth_fail("bad gameroom id")))
+                conn.sendall(protocol.ProtFuncs.encode_msg(protocol.MsgAuthFailed("bad gameroom id")))
             except Exception as e:
                 print(f"[{addr}] {e}")
         return None
@@ -184,12 +184,12 @@ class Server:
             else:
                 try:
                     conn.sendall(
-                        protocol.encode_msg(protocol.msg_auth_fail("usraname taken or field empty")))
+                        protocol.ProtFuncs.encode_msg(protocol.MsgAuthFailed("usraname taken or field empty")))
                 except Exception as e:
                     print(f"[{addr}] {e}")
         else:
             try:
-                conn.sendall(protocol.encode_msg(protocol.msg_auth_fail("bad gameroom id")))
+                conn.sendall(protocol.ProtFuncs.encode_msg(protocol.MsgAuthFailed("bad gameroom id")))
             except Exception as e:
                 print(f"[{addr}] {e}")
         return None
