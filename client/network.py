@@ -3,22 +3,35 @@ import queue
 import shared.protocol as protocol
 import ssl
 import os
+import sys
+from confighelper import ConfigHelper
 
 class Network:
     """מחלקה המטפלת בתקשורת של הלקוח כלפי השרת"""
     def __init__(self):
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server = "localhost"
-        self.port = 6677
+        config = ConfigHelper.loadconfig()
+        self.server = config['serverip']
+        self.port = config['port']
+        print(self.server, self.port)
         self.addr = (self.server, self.port)
         self.inc = queue.Queue()
         self.connect()
 
+    def _getdirifexe(self):
+        if getattr(sys, "_MEIPASS", None):
+            return sys._MEIPASS
+        else:
+            return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+
     def connect(self):
         """התחבר לשרת תחת מעטפת SSL """
-        basedir = os.path.dirname(os.path.abspath(__file__))
-        cert = os.path.join(basedir, "..", "certs", "cert.pem")
+        basedir = self._getdirifexe()
+        cert = os.path.join(basedir, "certs", "cert.pem")
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        context.check_hostname = False
         context.load_verify_locations(cert)
         try:
             self.client = context.wrap_socket(self.client, server_hostname="localhost")

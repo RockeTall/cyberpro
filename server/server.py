@@ -2,6 +2,13 @@ import socket
 import ssl
 import os
 import threading
+import sys
+server_dir = os.path.dirname(os.path.abspath(__file__))
+root_dir = os.path.dirname(server_dir)
+
+# Force Python to look in both directories for imports
+sys.path.insert(0, server_dir)
+sys.path.insert(0, root_dir)
 from player import Player
 import shared.protocol as protocol
 from database.db import Mydb
@@ -54,6 +61,7 @@ class Server:
 
         self.logger.started()
         print(f"server listens on {self.host}:{self.port}")
+        print(f"server socket: {self.server_sock}")
         context = self.ssl_start()
         try:
             while True:
@@ -196,7 +204,7 @@ class Server:
 
 
 def main():
-    server = Server(host="127.0.0.1", port=6677)
+    server = Server(host="192.168.7.32", port=6677)
 
 
 if __name__ == "__main__":
