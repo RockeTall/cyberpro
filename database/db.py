@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 
 class Mydb:
     """מחלקה המנהלת את ממסד הנתונים"""
+
     def __init__(self):
         base_dir = os.path.dirname(os.path.abspath(__file__))
         self.db_path = os.path.join(base_dir, "users.db")
@@ -14,7 +15,7 @@ class Mydb:
 
         envi = os.path.join(base_dir, ".env")
         load_dotenv(dotenv_path=envi)
-        self.pepper = os.environ.get("PEPPER", "").encode("utf-8") #טעינת הפלפל ממשתני הסביבה
+        self.pepper = os.environ.get("PEPPER", "").encode("utf-8")  # טעינת הפלפל ממשתני הסביבה
         if not self.pepper:
             raise ValueError("PEPPER environment variable not set")
 
@@ -32,7 +33,7 @@ class Mydb:
         cursor = conn.cursor()
         cursor.execute(""" CREATE TABLE IF NOT EXISTS users ( id 
         INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, 
-        password TEXT NOT NULL ) """)
+        password TEXT NOT NULL, firstname TEXT UNIQUE NOT NULL, lastname TEXT UNIQUE NOT NULL, email TEXT UNIQUE NOT NULL ) """)
 
         cursor.execute(""" CREATE TABLE IF NOT EXISTS scores ( id 
                 INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL UNIQUE,
@@ -52,7 +53,7 @@ class Mydb:
         conn.close()
         return row is not None
 
-    def register_user(self, username: str, password: str) -> int:
+    def register_user(self, username: str, password: str, first: str, last: str, email: str) -> int:
         """הרשמת משתמש, הוספת שם המשתמש והסיסמא לטבלה"""
         with self.lock:
             if self.user_exists(username):
@@ -63,7 +64,7 @@ class Mydb:
             hashed = bcrypt.hashpw(peppered, bcrypt.gensalt(12))
             conn = self.get_connection()
             cursor = conn.cursor()
-            cursor.execute(""" INSERT INTO users(username,password) VALUES (?, ?)""", (username, hashed))
+            cursor.execute(""" INSERT INTO users(username,password,firstname,lastname,email) VALUES (?, ?, ?, ?, ?)""", (username, hashed,first,last,email))
             conn.commit()
             user_id = cursor.lastrowid
             conn.close()

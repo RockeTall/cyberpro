@@ -181,11 +181,14 @@ class MsgLogin(BasisMessage):
 class MsgRegister(BasisMessage):
     """הודעה הנשלחת על ידי הלקוח כשמנסה להרשם"""
 
-    def __init__(self, username, password, gameroom):
+    def __init__(self, username, password, gameroom, first, last, email):
         super().__init__(ProtStrings.REGISTER)
         self.username = username
         self.password = password
         self.gameroom = gameroom
+        self.first = first
+        self.last = last
+        self.email = email
 
 
 class MsgAuthSucceed(BasisMessage):

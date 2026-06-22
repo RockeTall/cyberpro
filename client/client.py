@@ -8,8 +8,7 @@ def main():
     """הרצת הלקוח"""
     netw = Network()
     login = LoginPage(netw.client)
-    login.start()
-    player_info = login.runwindow()
+    player_info = login.start()
     if not player_info:
         netw.client.close()
         exit()

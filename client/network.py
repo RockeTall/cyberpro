@@ -52,15 +52,16 @@ class Network:
         while True:
             try:
                 data = self.client.recv(4096)
-                if not data:
-                    break
-                buff += data
-                while buff:
-                    msg, buff = protocol.ProtFuncs.packetparse(buff)
-                    if msg is None:
-                        break
-                    else:
-                        self.inc.put(msg)
             except Exception as e:
                 print(e)
                 break
+            if not data:
+                break
+            buff += data
+            while buff:
+                msg, buff = protocol.ProtFuncs.packetparse(buff)
+                if msg is None:
+                    break
+                else:
+                    self.inc.put(msg)
+

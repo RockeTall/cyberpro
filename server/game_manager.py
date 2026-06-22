@@ -48,6 +48,13 @@ class GameManager:
                 if room.room_id == player.room:
                     room._force_end = True
 
+    def can_add_player(self, username,roomid):
+        room = self.get_room(roomid)
+        names = {player.username for player in room.players}
+        print(f"names: {names}")
+        if len(room.players) >= 8 or username in names:
+            return False
+        return True
 
 class GameRoom:
     """מחלקה האחראית על חדר והמשחק שמתנהל בו"""
@@ -190,7 +197,6 @@ class GameRoom:
             if player != notsend:
                 player.send(msg)
 
-
     def add_player(self, player):
         """הוספת שחקן לחדר ושליחת הודעה לשחקנים האחרים ולשחקן עצמו"""
         with self.lock:
@@ -199,8 +205,9 @@ class GameRoom:
         for player in self.players:
             print(player.username)
         if self._game_active:
-            self.broadcast(protocol.MsgPlayerJoined(player.username, self.scoresdict, self._game_active, len(self.current_word),
-                                             self.round_number, int(self.turn_time - (time.time() - self.start_time))))
+            self.broadcast(
+                protocol.MsgPlayerJoined(player.username, self.scoresdict, self._game_active, len(self.current_word),
+                                         self.round_number, int(self.turn_time - (time.time() - self.start_time))))
             for event in self.draw_history:
                 player.send(event)
         else:
@@ -217,7 +224,7 @@ class GameRoom:
             if self.players_drawing and player in self.players_drawing:
                 self.players_drawing.remove(player)
         self.broadcast(protocol.MsgChat(f"{player.username} has left the room"))
-        self.db.update_score(player.id,player.username,player.score)
+        self.db.update_score(player.id, player.username, player.score)
 
         if not self._game_active:
             return

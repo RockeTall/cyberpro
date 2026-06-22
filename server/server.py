@@ -94,7 +94,7 @@ class Server:
         room.add_player(player)
         return player
 
-    def isint(self, value):
+    def _isint(self, value):
         try:
             int(value)
             return True
@@ -144,10 +144,9 @@ class Server:
                             if player:
                                 room = self.manager.get_room(player.room)
                                 if not room.guess(player, msg["message"]):
-                                    if self.moderator.review_message(msg["message"]):
-                                        room.broadcast(protocol.MsgChat(msg["message"], player.username))
-                                    else:
-                                        room.broadcast(protocol.MsgCensored(len(msg["message"]), player.username))
+                                    thread = threading.Thread(target=self.aiapproval,args=(msg["message"],player.username,room))
+                                    thread.daemon = True
+                                    thread.start()
                         elif msg["type"] == protocol.ProtStrings.CLIENT_START_GAME:
                             print(player.room)
                             self.manager.start_game_room(player)
@@ -167,8 +166,16 @@ class Server:
     def canlogin(self, conn, addr, msg):
         """הפעולה בודקת אם שחקן יכול חיבור, בודקת עם ממסד הנתונים"""
         user_id = self.db.login_user(msg["username"], msg["password"])
-        if self.isint(msg["gameroom"]):
+        if self._isint(msg["gameroom"]):
             if user_id:
+                if not self.manager.can_add_player(msg["username"], int(msg["gameroom"])):
+                    try:
+                        conn.sendall(
+                            protocol.ProtFuncs.encode_msg(
+                                protocol.MsgAuthFailed("cant join room, too many players or ur already in")))
+                    except Exception as e:
+                        print(f"[{addr}] {e}")
+                    return None
                 return user_id
             else:
                 try:
@@ -185,9 +192,16 @@ class Server:
 
     def canregister(self, conn, addr, msg):
         """הפעולה בודקת אם חיבור יכול להרשם, בודקת עם ממסד הנתונים"""
-        user_id = self.db.register_user(msg["username"], msg["password"])
-        if self.isint(msg["gameroom"]):
+        user_id = self.db.register_user(msg["username"], msg["password"],msg["first"],msg["last"],msg["email"])
+        if self._isint(msg["gameroom"]):
             if user_id:
+                if not self.manager.can_add_player(msg["username"], int(msg["gameroom"])):
+                    try:
+                        conn.sendall(
+                            protocol.ProtFuncs.encode_msg(protocol.MsgAuthFailed("cant join room, you can login now and join another room")))
+                    except Exception as e:
+                        print(f"[{addr}] {e}")
+                    return None
                 return user_id
             else:
                 try:
@@ -202,9 +216,14 @@ class Server:
                 print(f"[{addr}] {e}")
         return None
 
+    def aiapproval(self,message_text, username, room):
+        if self.moderator.review_message(message_text):
+            room.broadcast(protocol.MsgChat(message_text, username))
+        else:
+            room.broadcast(protocol.MsgCensored(len(message_text), username))
 
 def main():
-    server = Server(host="192.168.7.32", port=6677)
+    server = Server(host="localhost", port=6677)
 
 
 if __name__ == "__main__":
