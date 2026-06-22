@@ -1,6 +1,7 @@
 import tkinter as tk
 import socket
-
+import sys
+import os
 import shared.protocol as protocol
 from PIL import Image, ImageTk
 
@@ -40,7 +41,7 @@ class LoginPage:
         """לולאה המחכה להכנסת פרטים מהמשתמש"""
         login_logo = None
         try:
-            img = Image.open("../assets/scryber_logo_big.png")
+            img = Image.open(os.path.join(self._getdirifexe(), "assets", "scryber_logo_big.png"))
             img = img.resize((400, 200))
             login_logo = ImageTk.PhotoImage(img)
         except Exception as e:
@@ -253,3 +254,9 @@ class LoginPage:
                                                   self.reggameroom_field.get() if self.reggameroom_field.get() else 1,
                                                   self.first_field.get(), self.last_field.get(),
                                                   self.email_field.get()))
+    def _getdirifexe(self):
+        """להשיג את הדרך לקובץ גם אם זה EXE"""
+        if getattr(sys, "_MEIPASS", None):
+            return sys._MEIPASS
+        else:
+            return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
