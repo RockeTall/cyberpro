@@ -7,7 +7,6 @@ class ProtStrings(str, Enum):
     """מחלקת עזר המכילה את כל סוגי ההודעות"""
     DRAW_EVENT = "draw"
     CLEAR_EVENT = "clear"
-    JOIN_ROOM = "join"
     PLAYER_LIST = "players"
     PLAYER_JOINED = "player_joined"
     LOGIN = "login"
@@ -238,9 +237,13 @@ class ProtFuncs:
             if b"\n" not in buff:
                 return None, buff
             line, buff = buff.split(b"\n", 1)
+            if len(line) > 2048:
+                print("oversized packet dropped")
+                return None, buff
             if line:
                 line = line.decode("utf-8")
                 return ProtFuncs.decode_msg(line), buff  # החזרת הודעת ג'ייסון
+            return None, buff
         else:
             if first == b"\n":
                 buff = buff[1:]

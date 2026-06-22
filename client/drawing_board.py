@@ -342,7 +342,8 @@ class DrawingBoard:
                     f"<font face='sysarial' pixel_size = 25><b>{rec['username']} guessed correctly! +{rec['points']}</font><br>")
 
             elif rec["type"] == protocol.ProtStrings.TURN_END:
-                self.current_word = rec["word"]
+                self.chat_screen.append_html_text(
+                    f'<font face="sysarial" pixel_size = 25 color="#34eb71"><b> round ended! the word was {rec["word"]} </b> </font><br>')
                 self.scores = rec["scores"]
                 self.canvas.clear()
 
@@ -365,11 +366,11 @@ class DrawingBoard:
         for value in self.scores:
             self.scores[value] = 0
         self.chat_screen.append_html_text(
-            f"<font face='sysarial' pixel_size = 25><b>Game over! Winner: {rec['winner']}</font><br>")
+            f"<font face='sysarial' pixel_size = 25 color='#FFD700'><b>Game over! Winner: {rec['winner']}</font><br>")
         self.current_round = 0
 
     def handle_player_joined(self, rec):
-        """טיפול בהודעה של שחקן שנכנס"""
+        """טיפול במקרה שבו שחקן נכנס באמצע משחק"""
         if rec["username"] == self.username:
             self.scores = rec["scores"]
             if rec["isactive"]:

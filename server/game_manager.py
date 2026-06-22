@@ -4,33 +4,34 @@ import time
 import shared.protocol as protocol
 from database.db import Mydb
 
-WORDS = ["cat", "dog", "house", "tree", "car", "phone",
-         "computer", "book", "chair", "window", "guitar",
-         "pizza", "rocket", "elephant", "bicycle"]
-
 
 class GameManager:
     """מחלקה המנהלת את כלל החדרים שבהם מתנהלים המשחקים"""
 
     def __init__(self):
         self.rooms = []
+        self.lock = threading.RLock()
 
     def get_room(self, room_id):
         """הכנסה לחדר, ואם לא קיים יצירת אחד"""
-        for room in self.rooms:
-            if room.room_id == room_id:
-                return room
-        new_room = GameRoom(room_id)
-        self.rooms.append(new_room)
-        return new_room
+        with self.lock:
+            for room in self.rooms:
+                if room.room_id == room_id:
+                    return room
+            new_room = GameRoom(room_id)
+            self.rooms.append(new_room)
+            return new_room
 
     def remove_player(self, player):
         """הוצאת שחקן מחדר"""
-        for room in self.rooms:
+        with self.lock:
+            rlist = list(self.rooms)
+        for room in rlist:
             if room.room_id == player.room:
                 room.remove_player(player)
-                if len(room.players) == 0:
-                    self.rooms.remove(room)
+                with self.lock:
+                    if len(room.players) == 0:
+                        self.rooms.remove(room)
                 return
         return
 
@@ -43,18 +44,29 @@ class GameManager:
 
     def end_game_room(self, player):
         """מסיימת משחק בכוח בחדר מסויים"""
-        if self.rooms:
-            for room in self.rooms:
-                if room.room_id == player.room:
-                    room._force_end = True
+        with self.lock:
+            if self.rooms:
+                for room in self.rooms:
+                    if room.room_id == player.room:
+                        room._force_end = True
 
-    def can_add_player(self, username,roomid):
+    def can_add_player(self, username, roomid):
+        """לא לאפשר לצרף שחקן לחדר אם הוא מלא(8 שחקנים) או שהשחקן כבר נמצא בחדר"""
         room = self.get_room(roomid)
-        names = {player.username for player in room.players}
-        print(f"names: {names}")
-        if len(room.players) >= 8 or username in names:
-            return False
+        with room.lock:
+            names = {player.username for player in room.players}
+            print(f"names: {names}")
+            if len(room.players) >= 8 or username in names:
+                return False
         return True
+
+    def ishost(self, player):
+        """האם השחקן יוצר החדר"""
+        room = self.get_room(player.room)
+        if room.host == player:
+            return True
+        return False
+
 
 class GameRoom:
     """מחלקה האחראית על חדר והמשחק שמתנהל בו"""
@@ -64,8 +76,8 @@ class GameRoom:
         self.players = []
         self.draw_history = []
         self._game_active = False
-        self.correct = set()
-        self.players_drawing = []
+        self.correct = set()  # רשימה של שחקנים ייחודיים
+        self.players_drawing = []  # רשימת השחקנים שיכולים לצייר באותו הסיבוב
 
         self.number_of_rounds = number_of_rounds
         self.turn_time = turn_time
@@ -76,6 +88,7 @@ class GameRoom:
         self._force_end = False
         self.everyone_guessed = False
         self.scoresdict = {}
+        self.host = ""
 
         self.lock = threading.Lock()
         self.host = None
@@ -85,23 +98,29 @@ class GameRoom:
         """התחלת משחק,הפעולה מפעילה ריסט לפרמטרים ושולחת לכל השחקנים על התחלה"""
         if len(self.players) < 2:
             return
-        if not self._game_active:
-            self._game_active = True
-            self.reset()
-            print("starting game")
-            self.broadcast(protocol.MsgGameStart(self.room_id))
-            self.start_round()
-        else:
-            print("game already started")
+        with self.lock:
+            if self._game_active:
+                print("game already started")
+                return
+            else:
+                self._game_active = True
+        self.reset()
+        print("starting game")
+        self.broadcast(protocol.MsgGameStart(self.room_id))
+        self.start_round()
+
 
     def start_round(self):
         """התחלת סיבוב חדש, אם אי אפשר להתחיל סיבוב מפסיקה את המשחק"""
-        if len(self.players) < 2 or not self._game_active or self.round_number >= self.number_of_rounds:
+        with self.lock:
+            plist = list(self.players)
+        if len(plist) < 2 or not self._game_active or self.round_number >= self.number_of_rounds:
             self.end_game()
             return
-        self.round_number += 1
 
-        self.players_drawing = list(reversed(self.players))
+        self.round_number += 1
+        with self.lock:
+            self.players_drawing = list(reversed(self.players))  # השחקן האחרון שנכנס מצייר ראשון
         self.broadcast(protocol.MsgRoundStart(self.room_id))
         print("starting round")
         self.start_turn()
@@ -109,14 +128,31 @@ class GameRoom:
     def start_turn(self):
         """התחלת תור, הפעולה מתחילה את הזמן ובוחרת את המילה הסודית"""
         self.correct = set()
-        self.draw_history = []
+        with self.lock:
+            self.draw_history = []
         if not self.players_drawing:
             print("starting new round")
             self.start_round()
             return
 
         self.current_drawer = self.players_drawing.pop(0)
-        self.current_word = random.choice(WORDS)
+        self.current_word = random.choice([
+            "cat", "dog", "house", "tree", "car", "phone", "computer", "book",
+            "chair", "window", "guitar", "pizza", "rocket", "elephant", "bicycle",
+            "lion", "monkey", "penguin", "shark", "octopus", "spider", "snake",
+            "giraffe", "butterfly", "frog", "owl", "bee", "whale", "dinosaur",
+            "apple", "banana", "hamburger", "ice cream", "cake", "cookie", "donut",
+            "watermelon", "taco", "sushi", "cheese", "coffee", "milk", "egg",
+            "clock", "key", "lamp", "mirror", "glasses", "hat", "backpack", "sword",
+            "shield", "umbrella", "camera", "television", "keyboard", "headphones",
+            "sun", "moon", "star", "rainbow", "cloud", "snowman", "cactus", "flower",
+            "mountain", "volcano", "river", "fire", "ocean", "island",
+            "airplane", "helicopter", "boat", "submarine", "train", "truck", "tractor",
+            "alien", "robot", "zombie", "ghost", "pirate", "wizard", "castle",
+            "dragon", "superman", "ninja", "clown", "mermaid", "radiohead", "football", "basketball", "tennis",
+            "trophy",
+            "skateboard", "balloon", "present"
+        ])
         self.start_time = time.time()
 
         self.current_drawer.send(protocol.MsgWordToDraw(self.current_word))
@@ -128,15 +164,19 @@ class GameRoom:
     def turn_loop(self):
         """לולאת תור - לולאת משחק, נמשכת לאורך התור"""
         while True:
-            time.sleep(0.5)
-            if self._game_active:
+            time.sleep(0.5)  # כדי לא להקשות על השרת יותר מדי
+            with self.lock:
+                isactive = self._game_active
+                isend = self._force_end
+                isguessed = self.everyone_guessed
+            if isactive:
                 if time.time() - self.start_time >= self.turn_time:
                     print(f"time is up, the word was {self.current_word} ")
                     return
-                if self.everyone_guessed:
+                if isguessed:
                     print(f"everyone guessed {self.current_word} ")
                     return
-                if self._force_end:
+                if isend:
                     print("force ended game")
                     self.end_game()
 
@@ -152,9 +192,10 @@ class GameRoom:
                 points = max(10, int(time_left * 10))
                 player.score += points
                 self.scoresdict[player.username] = player.score
-                self.current_drawer.score += 20
+                self.current_drawer.score += 23 * (len(self.correct) + 3)
                 if len(self.correct) >= len(self.players) - 1:
                     self.everyone_guessed = True
+                    print("everyone guessed right")
         if guess.strip().lower() == self.current_word.lower():
             self.broadcast(protocol.MsgCorrectGuess(player.username, points))
             return True
@@ -177,39 +218,47 @@ class GameRoom:
     def end_turn(self):
         """סיום תור ושלחת נקודות"""
         scoresdict = {}
-        for player in self.players:
-            scoresdict[player.username] = player.score
+        with self.lock:
+            for player in self.players:
+                scoresdict[player.username] = player.score
         self.everyone_guessed = False
         self.broadcast(protocol.MsgTurnEnd(self.current_word, scoresdict))
         self.start_turn()
 
     def winner(self):
-        return max(self.players, key=lambda p: p.score).username
+        with self.lock:
+            return max(self.players, key=lambda p: p.score).username
 
     def broadcast(self, msg):
         """שליחת הודעה לכל השחקנים בחדר"""
-        for player in list(self.players):
+        with self.lock:
+            plist = list(self.players)
+        for player in plist:
             player.send(msg)
 
     def broadcast_except(self, msg, notsend):
         """שליחת הודעה לכל השחקנים בחדר חוץ מאחד"""
-        for player in list(self.players):
+        with self.lock:
+            plist = list(self.players)
+        for player in plist:
             if player != notsend:
                 player.send(msg)
 
     def add_player(self, player):
         """הוספת שחקן לחדר ושליחת הודעה לשחקנים האחרים ולשחקן עצמו"""
         with self.lock:
+            if len(self.players) == 0:
+                self.host = player
             self.players.append(player)
             self.scoresdict[player.username] = 0
-        for player in self.players:
-            print(player.username)
         if self._game_active:
             self.broadcast(
                 protocol.MsgPlayerJoined(player.username, self.scoresdict, self._game_active, len(self.current_word),
                                          self.round_number, int(self.turn_time - (time.time() - self.start_time))))
-            for event in self.draw_history:
-                player.send(event)
+            with self.lock:
+                hlist = list(self.draw_history)
+                for event in hlist:
+                    player.send(event)
         else:
             self.broadcast(protocol.MsgPlayerJoined(player.username, self.scoresdict, self._game_active))
         player.room = self.room_id
@@ -221,6 +270,9 @@ class GameRoom:
                 self.players.remove(player)
             if player in self.correct:
                 self.correct.discard(player)
+            if len(self.correct) >= len(self.players) - 1:
+                self.everyone_guessed = True
+                print("everyone guessed right")
             if self.players_drawing and player in self.players_drawing:
                 self.players_drawing.remove(player)
         self.broadcast(protocol.MsgChat(f"{player.username} has left the room"))
@@ -242,16 +294,17 @@ class GameRoom:
 
     def reset(self):
         """ריסט לנתוני המשחק בשביל להתחיל אחד חדש"""
-        self.round_number = 0
-        self.current_word = ""
-        self.current_drawer = None
-        self.players_drawing = []
-        self.correct = set()
-        self.everyone_guessed = False
-        self._force_end = False
-        self.draw_history = []
-        for player in self.players:
-            player.score = 0
-        self.scoresdict = {}
-        for player in self.players:
-            self.scoresdict[player.username] = 0
+        with self.lock:
+            self.round_number = 0
+            self.current_word = ""
+            self.current_drawer = None
+            self.players_drawing = []
+            self.correct = set()
+            self.everyone_guessed = False
+            self._force_end = False
+            self.draw_history = []
+            for player in self.players:
+                player.score = 0
+            self.scoresdict = {}
+            for player in self.players:
+                self.scoresdict[player.username] = 0

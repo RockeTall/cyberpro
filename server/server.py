@@ -3,12 +3,13 @@ import ssl
 import os
 import threading
 import sys
+
+# מכריח את פייתון לעשות import גם לקבצים כשפותחים CMD
 server_dir = os.path.dirname(os.path.abspath(__file__))
 root_dir = os.path.dirname(server_dir)
-
-# Force Python to look in both directories for imports
 sys.path.insert(0, server_dir)
 sys.path.insert(0, root_dir)
+
 from player import Player
 import shared.protocol as protocol
 from database.db import Mydb
@@ -54,7 +55,7 @@ class Server:
         self.db = Mydb()
         self.db.create_tables()
 
-        self.server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # פתיחת חיבור TCP על IPv4
         self.server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.server_sock.bind((self.host, self.port))
         self.server_sock.listen()
@@ -66,7 +67,7 @@ class Server:
         try:
             while True:
                 conn, addr = self.server_sock.accept()
-                conn = context.wrap_socket(conn, server_side=True) # עטיפת ה SSL
+                conn = context.wrap_socket(conn, server_side=True)  # עטיפת ה SSL
                 self.clients.append(conn)
                 self.logger.incoming(addr, "CLIENT CONNECTED")
                 thread = threading.Thread(target=self.handle_client, args=(conn, addr))
@@ -79,10 +80,10 @@ class Server:
 
     def ssl_start(self):
         """בניית עטיפת ה SSL המצפינה מידע העובר ברשת"""
-        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-        cert = os.path.join(BASE_DIR, "..", "certs", "cert.pem")
-        key = os.path.join(BASE_DIR, "..", "certs", "key.pem")
-        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER) # בחירת גרסת הטי אל אס לפי הלקוח
+        basedir = os.path.dirname(os.path.abspath(__file__))
+        cert = os.path.join(basedir, "..", "certs", "cert.pem")
+        key = os.path.join(basedir, "..", "certs", "key.pem")
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)  # בחירת גרסת הטי אל אס לפי הלקוח
         context.load_cert_chain(cert, key)
         return context
 
@@ -124,37 +125,50 @@ class Server:
                         self.logger.incoming(addr, msg, player.username)
                     else:
                         self.logger.incoming(addr, msg)
+
                     if msg["type"] == protocol.ProtStrings.LOGIN:
                         user_id = self.canlogin(conn, addr, msg)
-                        if user_id:
+                        if user_id:  # אם יכול להתחבר
                             authenticated = True
-                            player = self.authenticate(conn, user_id, msg["username"], int(msg["gameroom"]))
+                            player = self.authenticate(conn, user_id, msg["username"],
+                                                       int(msg["gameroom"]))  # החיבור הופך לשחקן
+
                     elif msg["type"] == protocol.ProtStrings.REGISTER:
                         user_id = self.canregister(conn, addr, msg)
-                        if user_id:
+                        if user_id:  # אם יכול להרשם
                             authenticated = True
-                            player = self.authenticate(conn, user_id, msg["username"], int(msg["gameroom"]))
+                            player = self.authenticate(conn, user_id, msg["username"],
+                                                       int(msg["gameroom"]))  # החיבור הופך לשחקן
+
                     if authenticated:
                         if msg["type"] == protocol.ProtStrings.DRAW_EVENT:
                             room = self.manager.get_room(player.room)
                             room.draw_history.append(msg)
                             if player and room.current_drawer == player:
                                 room.broadcast_except(msg, player)
+
                         elif msg["type"] == protocol.ProtStrings.CHAT:
                             if player:
                                 room = self.manager.get_room(player.room)
                                 if not room.guess(player, msg["message"]):
-                                    thread = threading.Thread(target=self.aiapproval,args=(msg["message"],player.username,room))
+                                    thread = threading.Thread(target=self.aiapproval,
+                                                              args=(msg["message"], player.username, room))
                                     thread.daemon = True
                                     thread.start()
+
                         elif msg["type"] == protocol.ProtStrings.CLIENT_START_GAME:
-                            print(player.room)
-                            self.manager.start_game_room(player)
+                            if self.manager.ishost(player):
+                                print(f"starting game in {player.room}")
+                                self.manager.start_game_room(player)
+
                         elif msg["type"] == protocol.ProtStrings.CLEAR_EVENT:
                             room = self.manager.get_room(player.room)
                             room.clear_history(player)
+
                         elif msg["type"] == protocol.ProtStrings.STOP_GAME:
-                            self.manager.end_game_room(player)
+                            if self.manager.ishost(player):
+                                print(f"stopping game in {player.room}")
+                                self.manager.end_game_room(player)
 
         if conn in self.clients:
             self.clients.remove(conn)
@@ -164,7 +178,7 @@ class Server:
         self.logger.incoming(addr, "CLIENT DISCONNECTED")
 
     def canlogin(self, conn, addr, msg):
-        """הפעולה בודקת אם שחקן יכול חיבור, בודקת עם ממסד הנתונים"""
+        """הפעולה בודקת אם שחקן יכול להתחבר, בודקת עם ממסד הנתונים"""
         user_id = self.db.login_user(msg["username"], msg["password"])
         if self._isint(msg["gameroom"]):
             if user_id:
@@ -192,13 +206,14 @@ class Server:
 
     def canregister(self, conn, addr, msg):
         """הפעולה בודקת אם חיבור יכול להרשם, בודקת עם ממסד הנתונים"""
-        user_id = self.db.register_user(msg["username"], msg["password"],msg["first"],msg["last"],msg["email"])
+        user_id = self.db.register_user(msg["username"], msg["password"], msg["first"], msg["last"], msg["email"])
         if self._isint(msg["gameroom"]):
             if user_id:
                 if not self.manager.can_add_player(msg["username"], int(msg["gameroom"])):
                     try:
                         conn.sendall(
-                            protocol.ProtFuncs.encode_msg(protocol.MsgAuthFailed("cant join room, you can login now and join another room")))
+                            protocol.ProtFuncs.encode_msg(
+                                protocol.MsgAuthFailed("cant join room, you can login now and join another room")))
                     except Exception as e:
                         print(f"[{addr}] {e}")
                     return None
@@ -216,13 +231,17 @@ class Server:
                 print(f"[{addr}] {e}")
         return None
 
-    def aiapproval(self,message_text, username, room):
+    def aiapproval(self, message_text, username, room):
+        """פעולה שנשלחת לתהילכון על מנת שלא לעקב את התקדמות הצ'ט
+        שליחה של ההודעה ל AI לבדיקת תוכן פוגעני"""
         if self.moderator.review_message(message_text):
             room.broadcast(protocol.MsgChat(message_text, username))
         else:
             room.broadcast(protocol.MsgCensored(len(message_text), username))
 
+
 def main():
+    """הרצת השרת"""
     server = Server(host="localhost", port=6677)
 
 
