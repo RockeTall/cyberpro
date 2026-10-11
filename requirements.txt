@@ -1,0 +1,12 @@
+# Server side
+bcrypt>=4.0.0
+python-dotenv>=1.0.0
+groq>=0.4.0
+cryptography>=42.0.0
+
+
+# Client side
+pygame>=2.5.0
+pygame_gui>=0.6.0
+Pillow>=10.0.0
+

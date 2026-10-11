@@ -33,7 +33,7 @@ class Mydb:
         cursor = conn.cursor()
         cursor.execute(""" CREATE TABLE IF NOT EXISTS users ( id 
         INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, 
-        password TEXT NOT NULL, firstname TEXT UNIQUE NOT NULL, lastname TEXT UNIQUE NOT NULL, email TEXT UNIQUE NOT NULL ) """)
+        password TEXT NOT NULL, firstname TEXT NOT NULL, lastname UNIQUE NOT NULL, email TEXT NOT NULL ) """)
 
         cursor.execute(""" CREATE TABLE IF NOT EXISTS scores ( id 
                 INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL UNIQUE,
