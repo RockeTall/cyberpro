@@ -10,7 +10,7 @@ Scryber is a skribbl inspired interactive game built in python with pygame, one 
 ---
 <img width="1199" height="731" alt="image" src="https://github.com/user-attachments/assets/2cb8c4d7-6d4b-4369-87fb-3a1eeca3fa03" />
 
-<img width="1188" height="724" alt="image" src="https://github.com/user-attachments/assets/58b55889-7574-44af-a9ff-a3d62f2d4962" />
+<img width="1192" height="723" alt="image" src="https://github.com/user-attachments/assets/dc8bb9cb-88d3-4131-8a4b-daef2d4a1c31" />
 ---
 
 ### Setup
